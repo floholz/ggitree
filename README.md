@@ -18,7 +18,7 @@ One Go binary with the page embedded. No Node at runtime or build time.
 Requires Go 1.27+ and git.
 
 ```sh
-make install            # builds and copies ggitree to ~/.local/bin
+make install            # builds, copies ggitree to ~/.local/bin and adds the T3 Code action
 make install-service    # optional: also start it at login (systemd user service)
 ```
 
