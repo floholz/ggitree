@@ -7,10 +7,10 @@ A JetBrains-style git graph for your repository, served as a local web page so i
 
 ## Why
 
-> I was a long-term, happy user of JetBrains IDEs and always liked their git integration and tree a lot.
+> "I was a long-term, happy user of JetBrains IDEs and always liked their git integration and tree a lot.
 > Since the AI age, I moved over to many different agent IDEs and CLIs, and now to T3 Code. With all of
 > these, I somewhat missed the nice and integrated git tree. I haven't found any existing solution that
-> really fits me or my workflow, so I finally decided to create it. … And that's GGitree.
+> really fits me or my workflow, so I finally decided to create it. … And that's GGitree."
 >
 > — floholz
 
@@ -38,6 +38,13 @@ One Go binary with the page embedded. No Node at runtime or build time.
 
 - Pull request indicators on branches and commits
 - GitHub Actions runs and their status for each commit
+
+### Maybe, someday
+
+Actions that change the repository, like checkout, merge, rebase or creating branches, are not planned for
+now. GGitree is meant as a read-only view you can keep open while you or an agent works, and git itself, your
+IDE or the agent already cover the writing side. That isn't a hard no: if it turns out to be missing, it may
+come later.
 
 <br clear="right">
 
