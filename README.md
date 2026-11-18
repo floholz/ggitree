@@ -7,7 +7,7 @@ A JetBrains-style git graph for your repository, served as a local web page so i
 
 ## Why
 
-> "I was a long-term, happy user of JetBrains IDEs and always liked their git integration and tree a lot.
+> "I was a longtime, happy user of JetBrains IDEs and always liked their git integration and tree a lot.
 > Since the AI age, I moved over to many different agent IDEs and CLIs, and now to T3 Code. With all of
 > these, I somewhat missed the nice and integrated git tree. I haven't found any existing solution that
 > really fits me or my workflow, so I finally decided to create it. … And that's GGitree."
