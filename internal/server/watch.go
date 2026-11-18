@@ -98,9 +98,12 @@ var (
 // serveSyntaxCSS serves token colors for highlighted diffs, light and dark.
 func serveSyntaxCSS(w http.ResponseWriter, r *http.Request) {
 	syntaxOnce.Do(func() {
+		// Each theme sits in its own media query: a token one theme leaves out
+		// must not take the other theme's color.
 		var b bytes.Buffer
+		b.WriteString("@media not (prefers-color-scheme: dark) {\n")
 		b.WriteString(themeCSS("github"))
-		b.WriteString("@media (prefers-color-scheme: dark) {\n")
+		b.WriteString("}\n@media (prefers-color-scheme: dark) {\n")
 		b.WriteString(themeCSS("github-dark"))
 		b.WriteString("}\n")
 		syntaxCSS = b.Bytes()

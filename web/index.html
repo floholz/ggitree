@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>ggitree</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cg fill='none' stroke='%2358a6ff' stroke-width='1.6'%3E%3Cpath d='M4 2v12M4 9c0-3 8-2 8-5'/%3E%3C/g%3E%3Ccircle cx='4' cy='13' r='2' fill='%2358a6ff'/%3E%3Ccircle cx='12' cy='3.5' r='2' fill='%23f0883e'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="dist/main.css">
+  <link rel="stylesheet" href="assets/syntax.css">
+</head>
+<body>
+  <div id="app" class="app">
+    <header class="toolbar">
+      <div class="repo">
+        <span class="live" id="live" title="Live"></span>
+        <span class="repo-name" id="repo-name">ggitree</span>
+        <span class="branch" id="branch" hidden></span>
+      </div>
+      <div class="search">
+        <input id="search" type="search" placeholder="Search commits" autocomplete="off" spellcheck="false" aria-label="Search commits">
+        <span class="search-count" id="search-count"></span>
+        <button class="icon-btn" id="search-prev" title="Previous match (Shift+Enter)" aria-label="Previous match">↑</button>
+        <button class="icon-btn" id="search-next" title="Next match (Enter)" aria-label="Next match">↓</button>
+      </div>
+      <button class="btn" id="jump-head" title="Select the checked-out commit (H)">HEAD</button>
+    </header>
+    <main class="body" id="body">
+      <section class="history" id="history" tabindex="0" aria-label="Commit history"></section>
+      <div class="splitter" id="splitter" role="separator" aria-orientation="horizontal" tabindex="-1"></div>
+      <section class="details" id="details" aria-label="Commit details"></section>
+    </main>
+    <div class="empty" id="empty" hidden></div>
+  </div>
+  <script type="module" src="dist/main.js"></script>
+</body>
+</html>
