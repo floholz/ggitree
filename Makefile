@@ -1,6 +1,6 @@
 PREFIX ?= $(HOME)/.local
 
-.PHONY: build web watch test run install install-t3 install-service uninstall uninstall-t3 clean
+.PHONY: build web watch test run screenshot install install-t3 install-service uninstall uninstall-t3 clean
 
 build: web
 	go build -o ggitree .
@@ -17,6 +17,10 @@ test:
 
 run: build
 	./ggitree serve .
+
+# Rebuilds docs/screenshot.png from a made-up demo repository.
+screenshot: build
+	tools/demo/screenshot.sh ./ggitree
 
 install: build
 	install -Dm755 ggitree $(PREFIX)/bin/ggitree

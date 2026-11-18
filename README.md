@@ -3,6 +3,8 @@
 A JetBrains-style commit graph for your repository, served as a local web page so it can sit in
 [T3 Code](https://github.com/pingdotgg/t3code)'s right panel (or any browser tab).
 
+<img src="docs/screenshot.png" alt="ggitree showing a demo repository at side-panel width" width="420" align="right">
+
 - Colored branch lanes with merges, branch and tag labels, and the checked-out commit ringed
 - Commit details with changed files, and syntax-highlighted diffs
 - Uncommitted changes as their own row at the top
@@ -99,7 +101,12 @@ thread's own checkout, so the graph shows that worktree.
 make build     # bundle the page (esbuild via its Go API) and build the binary
 make test
 make watch     # rebuild the page on change; run `go run . serve .` alongside
+make screenshot  # rebuild docs/screenshot.png (needs Node 22+ and Chrome)
 ```
+
+`make screenshot` builds a made-up repository with `tools/demo/demo-repo.sh` (merged and open
+branches, tags, two remotes, a second worktree, uncommitted changes), shows it with a private server
+and captures the page with headless Chrome. Set `CHROME` if Chrome isn't on your PATH.
 
 The page lives in `web/src` (plain TypeScript, no framework). `web/tsconfig.json` is only for type checking,
 e.g. `npx -p typescript tsc -p web`.
