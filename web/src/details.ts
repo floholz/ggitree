@@ -17,9 +17,29 @@ export class DetailsView {
   private token = 0;
   private cache = new Map<string, { commit: CommitDetail; refs: Ref[] | null }>();
   private listScroll = 0;
+  // An open diff owns one browser history entry, so every kind of "back" closes
+  // it: the mouse's back button, Alt+Left, or the host's back arrow. T3 Code's
+  // preview never passes the mouse's back button to the page; it only
+  // navigates back, which lands here as a popstate.
+  private historyEntry = false;
+  private ignorePops = 0;
 
   constructor(private root: HTMLElement, private cb: DetailsCallbacks) {
     this.placeholder("Select a commit");
+    window.addEventListener("popstate", () => {
+      if (this.ignorePops > 0) { this.ignorePops--; return; }
+      if (!this.historyEntry) return;
+      this.historyEntry = false;
+      this.closeDiff();
+    });
+  }
+
+  /** Removes the diff's history entry when the diff closes some other way. */
+  private dropHistoryEntry() {
+    if (!this.historyEntry) return;
+    this.historyEntry = false;
+    this.ignorePops++;
+    history.back();
   }
 
   get diffOpen() { return this.fileIndex >= 0; }
@@ -57,6 +77,7 @@ export class DetailsView {
     if (keep >= 0) {
       await this.openFile(keep);
     } else {
+      this.dropHistoryEntry();
       this.fileIndex = -1;
       this.listScroll = 0;
       this.renderCommit();
@@ -64,6 +85,7 @@ export class DetailsView {
   }
 
   clear() {
+    this.dropHistoryEntry();
     this.row = this.detail = null;
     this.fileIndex = -1;
     this.placeholder("Select a commit");
@@ -72,12 +94,18 @@ export class DetailsView {
   /** Closes the diff and returns to the file list. Returns false if none was open. */
   back(): boolean {
     if (this.fileIndex < 0) return false;
+    this.dropHistoryEntry();
+    this.closeDiff();
+    return true;
+  }
+
+  private closeDiff() {
+    if (this.fileIndex < 0) return;
     const prev = this.fileIndex;
     this.fileIndex = -1;
     this.renderCommit();
     this.root.scrollTop = this.listScroll;
     this.root.querySelector<HTMLElement>(`.file[data-i="${prev}"]`)?.classList.add("active");
-    return true;
   }
 
   /** Opens the first file's diff, or steps to the next/previous file when one is open. */
@@ -176,6 +204,10 @@ export class DetailsView {
     const f = d?.files?.[i];
     if (!d || !f) return;
     if (this.fileIndex < 0) this.listScroll = this.root.scrollTop;
+    if (!this.historyEntry) {
+      history.pushState({ ggitree: "diff" }, "");
+      this.historyEntry = true;
+    }
     this.fileIndex = i;
     const token = ++this.token;
     const header = this.diffHeader(f, i, d.files!.length);
