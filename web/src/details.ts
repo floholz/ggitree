@@ -224,6 +224,9 @@ function renderDiff(d: FileDiff): HTMLElement {
     box.append(el("div", "diff-note", "No content changes (mode or rename only)"));
     return box;
   }
+  let maxNo = 0;
+  for (const h of hunks) for (const l of h.lines) maxNo = Math.max(maxNo, l.o ?? 0, l.n ?? 0);
+  box.style.setProperty("--no-w", `${String(maxNo).length + 1}ch`);
   const parts: string[] = [];
   for (const h of hunks) {
     parts.push(`<div class="hunk-head">${escapeHTML(h.header)}</div>`);

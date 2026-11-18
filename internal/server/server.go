@@ -31,11 +31,12 @@ type Server struct {
 	addr   string
 	assets fs.FS
 
-	mu      sync.RWMutex
-	repo    *gitx.Repo
-	snap    *Snapshot
-	version int
-	err     string
+	mu       sync.RWMutex
+	repo     *gitx.Repo
+	snaps    map[gitx.Scope]*Snapshot // built on first use per scope
+	building sync.Mutex
+	version  int
+	err      string
 
 	clientsMu sync.Mutex
 	clients   map[chan string]struct{}
@@ -96,12 +97,13 @@ func (s *Server) Open(path string) error {
 		s.broadcast("focus")
 		return nil
 	}
-	snap, err := buildSnapshot(context.Background(), repo)
+	snap, err := buildSnapshot(context.Background(), repo, gitx.ScopeLocal)
 	if err != nil {
 		return err
 	}
 	s.mu.Lock()
-	s.repo, s.snap, s.err = repo, snap, ""
+	s.repo, s.err = repo, ""
+	s.snaps = map[gitx.Scope]*Snapshot{gitx.ScopeLocal: snap}
 	s.version++
 	s.mu.Unlock()
 	select {
@@ -115,10 +117,34 @@ func (s *Server) Open(path string) error {
 	return nil
 }
 
-func (s *Server) current() (*gitx.Repo, *Snapshot, int, string) {
+// current returns the open repository and its history in the given scope,
+// building that scope's history on first use.
+func (s *Server) current(scope gitx.Scope) (*gitx.Repo, *Snapshot, int, string) {
 	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.repo, s.snap, s.version, s.err
+	repo, snap, version, errMsg := s.repo, s.snaps[scope], s.version, s.err
+	s.mu.RUnlock()
+	if repo == nil || snap != nil {
+		return repo, snap, version, errMsg
+	}
+	s.building.Lock()
+	defer s.building.Unlock()
+	s.mu.RLock()
+	snap = s.snaps[scope]
+	s.mu.RUnlock()
+	if snap != nil {
+		return repo, snap, version, errMsg
+	}
+	next, err := buildSnapshot(context.Background(), repo, scope)
+	if err != nil {
+		return repo, nil, version, err.Error()
+	}
+	s.mu.Lock()
+	if s.repo == repo {
+		s.snaps[scope] = next
+	}
+	version = s.version
+	s.mu.Unlock()
+	return repo, next, version, errMsg
 }
 
 // requestRefresh asks the refresh loop to check the repository for changes.
@@ -145,24 +171,41 @@ func (s *Server) refreshLoop(ctx context.Context) {
 				continue
 			}
 		}
-		repo, snap, _, _ := s.current()
+		s.mu.RLock()
+		repo := s.repo
+		var scopes []gitx.Scope
+		var old *Snapshot
+		for sc, sn := range s.snaps {
+			scopes = append(scopes, sc)
+			old = sn
+		}
+		s.mu.RUnlock()
 		if repo == nil {
 			continue
 		}
 		fp, _, _, _, err := fingerprint(ctx, repo)
-		if err == nil && snap != nil && fp == snap.Fingerprint {
+		if err == nil && old != nil && fp == old.Fingerprint {
 			continue
 		}
-		next, err := buildSnapshot(ctx, repo)
+		next := map[gitx.Scope]*Snapshot{}
+		var buildErr error
+		for _, sc := range scopes {
+			sn, err := buildSnapshot(ctx, repo, sc)
+			if err != nil {
+				buildErr = err
+				break
+			}
+			next[sc] = sn
+		}
 		s.mu.Lock()
 		if s.repo != repo { // switched while building
 			s.mu.Unlock()
 			continue
 		}
-		if err != nil {
-			s.err = err.Error()
+		if buildErr != nil {
+			s.err = buildErr.Error()
 		} else {
-			s.snap, s.err = next, ""
+			s.snaps, s.err = next, ""
 		}
 		s.version++
 		s.mu.Unlock()
@@ -262,7 +305,7 @@ type repoJSON struct {
 }
 
 func (s *Server) handleState(w http.ResponseWriter, r *http.Request) {
-	repo, snap, version, errMsg := s.current()
+	repo, snap, version, errMsg := s.current(scopeOf(r))
 	st := stateJSON{Version: version, Error: errMsg}
 	if repo != nil {
 		st.Repo = &repoJSON{Name: repo.Name(), Root: repo.Root}
@@ -275,6 +318,8 @@ func (s *Server) handleState(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, st)
 }
 
+func scopeOf(r *http.Request) gitx.Scope { return gitx.ParseScope(r.URL.Query().Get("scope")) }
+
 func intParam(r *http.Request, name string, def int) int {
 	if v, err := strconv.Atoi(r.URL.Query().Get(name)); err == nil {
 		return v
@@ -283,7 +328,7 @@ func intParam(r *http.Request, name string, def int) int {
 }
 
 func (s *Server) handleRows(w http.ResponseWriter, r *http.Request) {
-	_, snap, version, _ := s.current()
+	_, snap, version, _ := s.current(scopeOf(r))
 	offset := max(intParam(r, "offset", 0), 0)
 	limit := min(max(intParam(r, "limit", 500), 1), 5000)
 	rows := []RowJSON{}
@@ -294,7 +339,7 @@ func (s *Server) handleRows(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleLocate(w http.ResponseWriter, r *http.Request) {
-	_, snap, version, _ := s.current()
+	_, snap, version, _ := s.current(scopeOf(r))
 	var idx []int
 	for _, sha := range strings.Split(r.URL.Query().Get("sha"), ",") {
 		i := -1
@@ -307,7 +352,7 @@ func (s *Server) handleLocate(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
-	_, snap, version, _ := s.current()
+	_, snap, version, _ := s.current(scopeOf(r))
 	matches := []int{}
 	if snap != nil {
 		if m := snap.Search(r.URL.Query().Get("q"), 10_000); m != nil {
@@ -318,7 +363,7 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleCommit(w http.ResponseWriter, r *http.Request) {
-	repo, snap, _, _ := s.current()
+	repo, snap, _, _ := s.current(scopeOf(r))
 	if repo == nil {
 		writeErr(w, http.StatusConflict, errors.New("no repository open"))
 		return
@@ -339,7 +384,9 @@ func (s *Server) handleCommit(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleDiff(w http.ResponseWriter, r *http.Request) {
-	repo, _, _, _ := s.current()
+	s.mu.RLock()
+	repo := s.repo
+	s.mu.RUnlock()
 	if repo == nil {
 		writeErr(w, http.StatusConflict, errors.New("no repository open"))
 		return
@@ -402,8 +449,10 @@ func (s *Server) handleOpen(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, err)
 		return
 	}
-	repo, _, _, _ := s.current()
-	writeJSON(w, map[string]string{"root": repo.Root})
+	s.mu.RLock()
+	root := s.repo.Root
+	s.mu.RUnlock()
+	writeJSON(w, map[string]string{"root": root})
 }
 
 func (s *Server) handleShutdown(w http.ResponseWriter, r *http.Request) {

@@ -83,7 +83,7 @@ button { font: inherit; color: inherit; }
   padding: 6px 10px; border-bottom: 1px solid var(--border);
   background: var(--bg-soft); min-height: 38px;
 }
-.repo { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 0 1 auto; }
+.repo { display: flex; align-items: center; gap: 8px; min-width: 48px; max-width: 45%; flex: 0 1 auto; overflow: hidden; }
 .repo-name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .branch {
   font: 12px var(--mono); color: var(--fg-muted);
@@ -92,7 +92,7 @@ button { font: inherit; color: inherit; }
 .live { width: 7px; height: 7px; border-radius: 50%; background: var(--fg-faint); flex: none; }
 .live.on { background: var(--add-fg); }
 .live.off { background: var(--del-fg); }
-.search { display: flex; align-items: center; gap: 2px; margin-left: auto; min-width: 0; flex: 0 1 260px; }
+.search { display: flex; align-items: center; gap: 2px; margin-left: auto; min-width: 90px; max-width: 280px; flex: 1 1 0; }
 .search input {
   flex: 1; min-width: 60px; height: 26px; padding: 0 8px;
   border: 1px solid var(--border); border-radius: 6px;
@@ -106,7 +106,21 @@ button { font: inherit; color: inherit; }
   background: none; cursor: pointer; color: var(--fg-muted);
 }
 .icon-btn:hover, .btn:hover { background: var(--bg-hover); color: var(--fg); }
-.btn { border-color: var(--border); font-size: 12px; font-weight: 600; }
+.btn { border-color: var(--border); font-size: 12px; font-weight: 600; flex: none; }
+@container (max-width: 560px) {
+  .toolbar { gap: 6px; padding: 6px 8px; }
+  .search .icon-btn { display: none; }
+  .branch { max-width: 90px; }
+}
+@container (max-width: 400px) { .branch { display: none; } }
+.seg { display: flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; flex: none; }
+.seg button {
+  height: 24px; padding: 0 8px; border: 0; background: none; cursor: pointer;
+  font-size: 12px; font-weight: 600; color: var(--fg-muted);
+}
+.seg button + button { border-left: 1px solid var(--border); }
+.seg button:hover { background: var(--bg-hover); color: var(--fg); }
+.seg button[aria-pressed="true"] { background: var(--sel); color: var(--fg); }
 
 /* Split layout: stacked when narrow, side by side when wide. */
 .body { flex: 1; min-height: 0; display: grid; grid-template-rows: var(--split, 55%) 5px 1fr; grid-template-columns: 100%; }
@@ -201,7 +215,7 @@ button { font: inherit; color: inherit; }
 .diff-head .path { font: 12px var(--mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; direction: rtl; text-align: left; }
 .diff { font: 12px/1.55 var(--mono); }
 .hunk-head { color: var(--fg-muted); background: var(--bg-soft); padding: 2px 10px; white-space: pre; overflow: hidden; text-overflow: ellipsis; }
-.dl { display: grid; grid-template-columns: 4ch 4ch 1fr; white-space: pre; }
+.dl { display: grid; grid-template-columns: var(--no-w, 4ch) var(--no-w, 4ch) 1fr; white-space: pre; }
 .dl .no { color: var(--fg-faint); text-align: right; padding-right: 6px; user-select: none; font-size: 11px; }
 .dl .tx { padding-left: 14px; position: relative; overflow-wrap: anywhere; white-space: pre-wrap; }
 .dl .tx::before { position: absolute; left: 3px; color: var(--fg-faint); }

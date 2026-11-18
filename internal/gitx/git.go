@@ -81,12 +81,37 @@ type Commit struct {
 	Subject string
 }
 
-// Log lists commits reachable from branches, remotes, tags and HEAD, newest first,
-// in date order that never shows a parent before its children.
-func (r *Repo) Log(ctx context.Context, max int) ([]Commit, error) {
-	out, err := r.git(ctx, "log", "--branches", "--remotes", "--tags", "HEAD",
-		"--date-order", "--max-count="+strconv.Itoa(max),
-		"--format=%H%x1f%P%x1f%an%x1f%ae%x1f%at%x1f%s%x1e")
+// Scope selects which refs the history starts from.
+type Scope string
+
+const (
+	// ScopeLocal shows local branches, the remote branches they track, and HEAD.
+	ScopeLocal Scope = "local"
+	// ScopeAll adds every remote branch and tag.
+	ScopeAll Scope = "all"
+)
+
+// ParseScope reads a scope name, defaulting to ScopeLocal.
+func ParseScope(s string) Scope {
+	if s == string(ScopeAll) {
+		return ScopeAll
+	}
+	return ScopeLocal
+}
+
+// Log lists commits reachable from the scope's refs, newest first, in date order
+// that never shows a parent before its children.
+func (r *Repo) Log(ctx context.Context, max int, scope Scope) ([]Commit, error) {
+	args := []string{"log", "--date-order", "--max-count=" + strconv.Itoa(max),
+		"--format=%H%x1f%P%x1f%an%x1f%ae%x1f%at%x1f%s%x1e"}
+	if scope == ScopeAll {
+		args = append(args, "--branches", "--remotes", "--tags")
+	} else {
+		args = append(args, "--branches")
+		args = append(args, r.upstreams(ctx)...)
+	}
+	args = append(args, "HEAD", "--")
+	out, err := r.git(ctx, args...)
 	if err != nil {
 		// A fresh repository has no HEAD yet.
 		if strings.Contains(err.Error(), "unknown revision") || strings.Contains(err.Error(), "does not have any commits") {
@@ -110,6 +135,26 @@ func (r *Repo) Log(ctx context.Context, max int) ([]Commit, error) {
 		})
 	}
 	return commits, nil
+}
+
+// upstreams lists the remote-tracking refs that local branches track.
+func (r *Repo) upstreams(ctx context.Context) []string {
+	out, err := r.git(ctx, "for-each-ref", "--format=%(upstream)", "refs/heads")
+	if err != nil {
+		return nil
+	}
+	var refs []string
+	seen := map[string]bool{}
+	for _, u := range strings.Fields(out) {
+		// Only existing remote-tracking refs; a gone upstream would make git log fail.
+		if strings.HasPrefix(u, "refs/remotes/") && !seen[u] {
+			if _, err := r.git(ctx, "rev-parse", "-q", "--verify", u); err == nil {
+				seen[u] = true
+				refs = append(refs, u)
+			}
+		}
+	}
+	return refs
 }
 
 // RefKind classifies a ref for display.

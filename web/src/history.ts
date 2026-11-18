@@ -24,7 +24,7 @@ export class HistoryView {
   private ctx = this.canvas.getContext("2d")!;
 
   private total = 0;
-  private version = -1;
+  private generation = 0; // bumped on every reset, so stale page loads are dropped
   private pages = new Map<number, Row[]>();
   private loading = new Set<number>();
   private rendered = new Map<number, HTMLElement>();
@@ -32,6 +32,8 @@ export class HistoryView {
   private matches = new Set<number>();
   private headSha = "";
   private colors: string[] = [];
+  private dimColors: string[] = [];
+  private bg = "#000";
   private frame = 0;
 
   constructor(root: HTMLElement, private cb: HistoryCallbacks) {
@@ -64,6 +66,10 @@ export class HistoryView {
   private readColors() {
     const cs = getComputedStyle(document.documentElement);
     this.colors = Array.from({ length: LANE_COLORS }, (_, i) => cs.getPropertyValue(`--lane-${i}`).trim());
+    this.bg = cs.getPropertyValue("--bg").trim();
+    // Lines of other branches are mixed toward the background rather than drawn
+    // translucent: overlapping translucent pieces would show darker joints.
+    this.dimColors = this.colors.map((c) => mix(c, this.bg, 0.5));
   }
 
   laneColor(c: number): string {
@@ -71,9 +77,9 @@ export class HistoryView {
   }
 
   /** Replaces the data with a new version of the history. */
-  reset(total: number, version: number, headSha: string) {
+  reset(total: number, headSha: string) {
     this.total = total;
-    this.version = version;
+    this.generation++;
     this.headSha = headSha;
     this.pages.clear();
     this.loading.clear();
@@ -103,14 +109,14 @@ export class HistoryView {
       return;
     }
     this.loading.add(p);
-    const version = this.version;
+    const gen = this.generation;
     try {
       const res = await api.rows(p * PAGE, PAGE);
-      if (version !== this.version) return; // replaced meanwhile
+      if (gen !== this.generation) return; // replaced meanwhile
       this.pages.set(p, res.rows);
       this.rerender();
     } finally {
-      this.loading.delete(p);
+      if (gen === this.generation) this.loading.delete(p);
     }
   }
 
@@ -245,7 +251,7 @@ export class HistoryView {
     c.setTransform(dpr, 0, 0, dpr, 0, 0);
     c.clearRect(0, 0, w, h);
     c.lineWidth = 2;
-    c.lineCap = "round";
+    c.lineCap = "butt";
 
     const sel = this.row(this.selected);
     const focus = sel ? sel.c : -1;
@@ -259,8 +265,9 @@ export class HistoryView {
       const ys = [top, top + ROW_H / 2, top + ROW_H];
       const dashed = row.h === WORKTREE;
       for (const [x1, y1, x2, y2, color] of row.e) {
-        c.strokeStyle = this.laneColor(color);
-        c.globalAlpha = focus < 0 || color === focus ? 1 : 0.55;
+        c.strokeStyle = focus < 0 || color === focus
+          ? this.laneColor(color)
+          : this.dimColors[color % LANE_COLORS];
         c.setLineDash(dashed && y1 === 1 ? [3, 3] : []);
         const ax = x(x1), ay = ys[y1], bx = x(x2), by = ys[y2];
         c.beginPath();
@@ -275,8 +282,7 @@ export class HistoryView {
       }
     }
     c.setLineDash([]);
-    c.globalAlpha = 1;
-    const bg = getComputedStyle(document.body).backgroundColor;
+    const bg = this.bg;
     for (let i = first; i <= last; i++) {
       const row = this.row(i);
       if (!row) continue;
@@ -320,4 +326,19 @@ export class HistoryView {
     }
     return n;
   }
+}
+
+/** Mixes two #rrggbb colors; t is the share of the first. */
+function mix(a: string, b: string, t: number): string {
+  const pa = hex(a), pb = hex(b);
+  if (!pa || !pb) return a;
+  const ch = (i: number) => Math.round(pa[i] * t + pb[i] * (1 - t)).toString(16).padStart(2, "0");
+  return `#${ch(0)}${ch(1)}${ch(2)}`;
+}
+
+function hex(c: string): number[] | null {
+  const m = /^#([0-9a-f]{6})$/i.exec(c);
+  if (!m) return null;
+  const n = parseInt(m[1], 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
 }

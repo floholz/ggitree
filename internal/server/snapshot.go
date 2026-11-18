@@ -65,12 +65,12 @@ func fingerprint(ctx context.Context, repo *gitx.Repo) (string, gitx.HeadInfo, m
 	return hex.EncodeToString(h.Sum(nil))[:16], head, refs, dirty, nil
 }
 
-func buildSnapshot(ctx context.Context, repo *gitx.Repo) (*Snapshot, error) {
+func buildSnapshot(ctx context.Context, repo *gitx.Repo, scope gitx.Scope) (*Snapshot, error) {
 	fp, head, refs, dirty, err := fingerprint(ctx, repo)
 	if err != nil {
 		return nil, err
 	}
-	commits, err := repo.Log(ctx, maxCommits)
+	commits, err := repo.Log(ctx, maxCommits, scope)
 	if err != nil {
 		return nil, err
 	}
@@ -126,7 +126,6 @@ func uncommittedLabel(n int) string {
 	}
 	return "Uncommitted changes (" + strconv.Itoa(n) + " files)"
 }
-
 
 // Locate finds the row of a full or abbreviated commit id.
 func (s *Snapshot) Locate(sha string) int {

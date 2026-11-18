@@ -1,5 +1,5 @@
 import "./style.css";
-import { api, Row, State, WORKTREE } from "./api";
+import { api, Row, Scope, setScope, State, WORKTREE } from "./api";
 import { DetailsView } from "./details";
 import { HistoryView } from "./history";
 
@@ -70,7 +70,7 @@ async function loadFresh() {
   showState(st);
   details.clear();
   selectedSha = "";
-  history.reset(st.total, st.version, st.head?.sha ?? "");
+  history.reset(st.total, st.head?.sha ?? "");
   history.scrollRowTo(0, 0);
   await runSearch();
   if (!st.total) return;
@@ -92,7 +92,7 @@ async function reloadKeep() {
   if (st.repo?.root !== state.repo?.root) return loadFresh();
   showState(st);
   const { indexes } = await api.locate([anchor?.h ?? "", prevSelected]);
-  history.reset(st.total, st.version, st.head?.sha ?? "");
+  history.reset(st.total, st.head?.sha ?? "");
   // Stay at the top when we were there, so new commits come into view.
   if (wasAtTop) history.scrollRowTo(0, 0);
   else if (indexes[0] >= 0) history.scrollRowTo(indexes[0], -anchorOffset);
@@ -223,6 +223,26 @@ async function jumpHead() {
   if (state?.head?.sha) await goTo(state.head.sha);
   historyEl.focus();
 }
+
+// ---------- Branch scope ----------
+
+const SCOPE_KEY = "ggitree.scope";
+const scopeButtons: Record<Scope, HTMLElement> = { local: $("scope-local"), all: $("scope-all") };
+
+function applyScope(sc: Scope) {
+  setScope(sc);
+  for (const [k, b] of Object.entries(scopeButtons)) b.setAttribute("aria-pressed", String(k === sc));
+}
+
+function chooseScope(sc: Scope) {
+  try { localStorage.setItem(SCOPE_KEY, sc); } catch { /* private mode */ }
+  applyScope(sc);
+  queueReload();
+}
+
+scopeButtons.local.onclick = () => chooseScope("local");
+scopeButtons.all.onclick = () => chooseScope("all");
+try { applyScope(localStorage.getItem(SCOPE_KEY) === "all" ? "all" : "local"); } catch { applyScope("local"); }
 
 // ---------- Keyboard ----------
 

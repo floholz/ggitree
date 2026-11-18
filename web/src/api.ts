@@ -72,8 +72,14 @@ export interface FileDiff {
 
 export const WORKTREE = "WORKTREE";
 
+export type Scope = "local" | "all";
+
+/** Which branches the history shows; sent with every history request. */
+export let scope: Scope = "local";
+export function setScope(s: Scope) { scope = s; }
+
 async function get<T>(path: string, params: Record<string, string | number> = {}): Promise<T> {
-  const q = new URLSearchParams();
+  const q = new URLSearchParams({ scope });
   for (const [k, v] of Object.entries(params)) q.set(k, String(v));
   const res = await fetch(`${path}?${q}`, { cache: "no-store" });
   const body = await res.json();
