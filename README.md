@@ -49,9 +49,29 @@ Search matches commit messages, authors, commit ids and ref names.
 
 ## In T3 Code's right panel
 
-Add an action in T3 Code: Settings → Projects → Actions with **All projects** selected applies it to every
-project; **Add Action** in a thread's top bar adds it to that project only. Projects that already have their
-own action list need it added there too.
+Add an action in T3 Code with the fields below. The settings page only edits one project's actions
+(Settings → Projects → *project* → Actions, or **Add Action** in a thread's top bar). To give every project
+the action, add it to the top-level `defaultProjectScripts` array in `~/.t3/userdata/settings.json`, which
+T3 Code reloads on save:
+
+```json
+"defaultProjectScripts": [
+  {
+    "id": "ggitree",
+    "name": "Git tree",
+    "command": "ggitree open; exit",
+    "icon": "play",
+    "runOnWorktreeCreate": false,
+    "stopOnSettle": true,
+    "previewUrl": "http://127.0.0.1:4747",
+    "autoOpenPreview": true
+  }
+]
+```
+
+A project with its own action list uses that list instead of the defaults, so add the action to those
+projects as well. The shortcut is a separate entry in `~/.t3/userdata/keybindings.json`:
+`{ "key": "mod+alt+g", "command": "script.ggitree.run" }`.
 
 | Field | Value |
 | --- | --- |
@@ -62,7 +82,8 @@ own action list need it added there too.
 | Stop this action when the thread settles | on |
 | Open preview automatically when this action runs | on |
 
-Pressing the keybinding opens the graph as a browser tab in the right panel. The action runs in the
+Pressing the keybinding opens the graph as a browser tab in the right panel, not the floating preview. The
+"Auto-show floating preview" browser setting only applies to previews an agent opens. The action runs in the
 thread's own checkout, so the graph shows that worktree.
 
 - `exit` closes the terminal the action ran in. "Stop this action when the thread settles" makes T3 Code
