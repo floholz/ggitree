@@ -56,6 +56,9 @@ Search matches commit messages, authors, commit ids and ref names.
 Clicking a remote branch or tag that the **Local** view doesn't include switches to **All** first. Drag
 the line under the branches panel to resize it; its size and whether it is open are remembered.
 
+The switch in the bottom-right corner fixes the layout: **Auto** puts the graph and the details side by
+side when the page is wide and stacks them when it is narrow, or pick always stacked or always side by side.
+
 ## In T3 Code's right panel
 
 `make install` sets this up: it runs `ggitree t3-install`, which adds a **GGitree** action to every project

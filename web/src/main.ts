@@ -325,11 +325,30 @@ function readSplit(): Record<string, number> {
   try { return JSON.parse(localStorage.getItem(SPLIT_KEY) ?? "{}"); } catch { return {}; }
 }
 
+type LayoutMode = "auto" | "stacked" | "side";
+const LAYOUT_KEY = "ggitree.layout";
+const layoutButtons: Record<LayoutMode, HTMLElement> = {
+  auto: $("layout-auto"), stacked: $("layout-stacked"), side: $("layout-side"),
+};
+let layoutMode: LayoutMode = "auto";
+try {
+  const saved = localStorage.getItem(LAYOUT_KEY);
+  if (saved === "stacked" || saved === "side") layoutMode = saved;
+} catch { /* private mode */ }
+
+function chooseLayout(mode: LayoutMode) {
+  layoutMode = mode;
+  try { localStorage.setItem(LAYOUT_KEY, mode); } catch { /* private mode */ }
+  applyLayout();
+}
+for (const [mode, b] of Object.entries(layoutButtons)) b.onclick = () => chooseLayout(mode as LayoutMode);
+
 function applyLayout() {
-  const wide = app.clientWidth >= 820;
+  for (const [mode, b] of Object.entries(layoutButtons)) b.setAttribute("aria-pressed", String(mode === layoutMode));
+  const wide = layoutMode === "side" || (layoutMode === "auto" && app.clientWidth >= 820);
   app.classList.toggle("wide", wide);
-  const saved = readSplit()[wide ? "wide" : "tall"];
-  body.style.setProperty("--split", saved ? `${saved * 100}%` : wide ? "58%" : "55%");
+  const savedSplit = readSplit()[wide ? "wide" : "tall"];
+  body.style.setProperty("--split", savedSplit ? `${savedSplit * 100}%` : wide ? "58%" : "55%");
 }
 new ResizeObserver(applyLayout).observe(app);
 

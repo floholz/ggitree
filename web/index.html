@@ -38,6 +38,15 @@
       <div class="splitter" id="splitter" role="separator" aria-orientation="horizontal" tabindex="-1"></div>
       <section class="details" id="details" aria-label="Commit details"></section>
     </main>
+    <div class="seg layout-switch" role="group" aria-label="Layout">
+      <button id="layout-auto" title="Automatic layout: side by side when wide, stacked when narrow">Auto</button>
+      <button id="layout-stacked" class="icon" title="Stacked: graph above details" aria-label="Stacked layout">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2.5" width="12" height="11" rx="1.5"/><path d="M2 8h12"/></svg>
+      </button>
+      <button id="layout-side" class="icon" title="Side by side: graph left, details right" aria-label="Side-by-side layout">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2.5" width="12" height="11" rx="1.5"/><path d="M8 2.5v11"/></svg>
+      </button>
+    </div>
     <div class="empty" id="empty" hidden></div>
   </div>
   <script type="module" src="dist/main.js"></script>
