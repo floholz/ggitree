@@ -49,28 +49,27 @@ Search matches commit messages, authors, commit ids and ref names.
 
 ## In T3 Code's right panel
 
-Add a project action (Settings → Projects → Actions, with **All projects** selected so it applies everywhere):
+Add an action in T3 Code: Settings → Projects → Actions with **All projects** selected applies it to every
+project; **Add Action** in a thread's top bar adds it to that project only. Projects that already have their
+own action list need it added there too.
 
 | Field | Value |
 | --- | --- |
-| Name | Git tree |
+| Name | `Git tree` |
+| Keybinding | e.g. `Ctrl+Alt+G` |
 | Command | `ggitree open; exit` |
 | Preview URL | `http://127.0.0.1:4747` |
-| Open preview automatically | on |
-| Stop when the thread settles | on |
+| Stop this action when the thread settles | on |
+| Open preview automatically when this action runs | on |
 
-The action runs in the thread's own checkout, so the graph shows that worktree. `exit` closes the terminal
-the action ran in; "stop when the thread settles" makes T3 Code use a fresh terminal for it instead of
-reusing one of yours. The server detaches from the terminal and keeps running.
+Pressing the keybinding opens the graph as a browser tab in the right panel. The action runs in the
+thread's own checkout, so the graph shows that worktree.
 
-Then bind a key in `~/.t3/userdata/keybindings.json` (`git-tree` is the action's id, shown in its settings):
-
-```json
-{ "key": "mod+alt+g", "command": "script.git-tree.run" }
-```
-
-T3 Code opens the preview right after starting the command. If the server is not running yet, the very
-first open can beat it; reload the tab, or run `make install-service` so it is always up.
+- `exit` closes the terminal the action ran in. "Stop this action when the thread settles" makes T3 Code
+  start a fresh terminal for it rather than reusing one of yours, so `exit` never closes your shell. The
+  server detaches from the terminal and keeps running.
+- T3 Code opens the preview right after starting the command. If the server is not running yet, the very
+  first open can beat it; reload the tab, or run `make install-service` so it is always up.
 
 ## Develop
 
