@@ -195,7 +195,7 @@ export class DetailsView {
   private diffHeader(f: FileChange, i: number, n: number): HTMLElement {
     const h = el("div", "diff-head");
     const back = el("button", "icon-btn", "←");
-    back.title = "Back to files (Esc)";
+    back.title = "Back to files (Esc or mouse back)";
     back.onclick = () => this.back();
     const prev = el("button", "icon-btn", "‹");
     prev.title = "Previous file ([)";

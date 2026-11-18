@@ -318,6 +318,28 @@ scopeButtons.local.onclick = () => chooseScope("local");
 scopeButtons.all.onclick = () => chooseScope("all");
 try { applyScope(localStorage.getItem(SCOPE_KEY) === "all" ? "all" : "local"); } catch { applyScope("local"); }
 
+// ---------- Mouse back ----------
+
+// The mouse's back button (and Alt+Left) leaves an open diff. The browser's own
+// back navigation would leave the page, so it is cancelled while a diff is open;
+// with no diff open the button keeps its usual meaning.
+const MOUSE_BACK = 3;
+for (const type of ["mousedown", "mouseup", "auxclick"] as const) {
+  document.addEventListener(type, (e) => {
+    if (e.button !== MOUSE_BACK || !details.diffOpen) return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (type === "mouseup") details.back();
+  }, true);
+}
+document.addEventListener("keydown", (e) => {
+  const isBack = e.key === "BrowserBack" || (e.altKey && e.key === "ArrowLeft");
+  if (isBack && details.diffOpen) {
+    e.preventDefault();
+    details.back();
+  }
+}, true);
+
 // ---------- Keyboard ----------
 
 document.addEventListener("keydown", (e) => {

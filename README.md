@@ -82,7 +82,7 @@ ggitree stop
 | `PgUp` `PgDn` `Home` `End` | Move by page / to the ends |
 | `Enter` / `]` | Open the first (next) file's diff |
 | `[` | Previous file |
-| `Esc` | Back from the diff to the file list |
+| `Esc`, mouse back or `Alt+←` | Back from the diff to the file list |
 | `/` or `Ctrl+F` | Search; `Enter` / `Shift+Enter` for next / previous match |
 | `H` | Select the checked-out commit |
 | `F` | Follow the newest change (the target button next to **HEAD**) |
