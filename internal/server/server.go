@@ -1,0 +1,415 @@
+// Package server serves the ggitree page and its JSON API on localhost.
+package server
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io/fs"
+	"log"
+	"net"
+	"net/http"
+	"os"
+	"strconv"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/floholz/ggitree/internal/gitx"
+)
+
+// Version is the ggitree build version, reported by /api/health.
+var Version = "dev"
+
+// HeaderName must be sent with every request that changes server state. Browsers
+// cannot add it to a cross-site request without CORS approval, which ggitree never gives.
+const HeaderName = "X-Ggitree"
+
+// Server holds the repository being shown and its computed history.
+type Server struct {
+	addr   string
+	assets fs.FS
+
+	mu      sync.RWMutex
+	repo    *gitx.Repo
+	snap    *Snapshot
+	version int
+	err     string
+
+	clientsMu sync.Mutex
+	clients   map[chan string]struct{}
+
+	refresh  chan struct{}
+	watchCtl chan *gitx.Repo
+	shutdown func()
+}
+
+// New creates a server that will listen on addr and serve the page from assets.
+func New(addr string, assets fs.FS) *Server {
+	return &Server{
+		addr:     addr,
+		assets:   assets,
+		clients:  map[chan string]struct{}{},
+		refresh:  make(chan struct{}, 1),
+		watchCtl: make(chan *gitx.Repo, 1),
+	}
+}
+
+// Run serves until ctx ends or a shutdown request arrives.
+func (s *Server) Run(ctx context.Context) error {
+	ln, err := net.Listen("tcp", s.addr)
+	if err != nil {
+		return err
+	}
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	s.shutdown = cancel
+
+	srv := &http.Server{Handler: s.routes(), ReadHeaderTimeout: 10 * time.Second}
+	go s.watchLoop(ctx)
+	go s.refreshLoop(ctx)
+	go func() {
+		<-ctx.Done()
+		s.broadcast("bye")
+		shutCtx, c := context.WithTimeout(context.Background(), 2*time.Second)
+		defer c()
+		_ = srv.Shutdown(shutCtx)
+	}()
+	log.Printf("ggitree %s listening on http://%s", Version, s.addr)
+	if err := srv.Serve(ln); !errors.Is(err, http.ErrServerClosed) {
+		return err
+	}
+	return nil
+}
+
+// Open switches the server to the repository containing path.
+func (s *Server) Open(path string) error {
+	repo, err := gitx.Open(path)
+	if err != nil {
+		return err
+	}
+	s.mu.Lock()
+	same := s.repo != nil && s.repo.Root == repo.Root
+	s.mu.Unlock()
+	if same {
+		s.broadcast("focus")
+		return nil
+	}
+	snap, err := buildSnapshot(context.Background(), repo)
+	if err != nil {
+		return err
+	}
+	s.mu.Lock()
+	s.repo, s.snap, s.err = repo, snap, ""
+	s.version++
+	s.mu.Unlock()
+	select {
+	case s.watchCtl <- repo:
+	default:
+		<-s.watchCtl
+		s.watchCtl <- repo
+	}
+	log.Printf("showing %s", repo.Root)
+	s.broadcast("repo")
+	return nil
+}
+
+func (s *Server) current() (*gitx.Repo, *Snapshot, int, string) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.repo, s.snap, s.version, s.err
+}
+
+// requestRefresh asks the refresh loop to check the repository for changes.
+func (s *Server) requestRefresh() {
+	select {
+	case s.refresh <- struct{}{}:
+	default:
+	}
+}
+
+// refreshLoop rebuilds the history when the repository changed. It runs on file
+// events and, while a page is connected, every two seconds to catch edits in the
+// working tree (which are not watched).
+func (s *Server) refreshLoop(ctx context.Context) {
+	tick := time.NewTicker(2 * time.Second)
+	defer tick.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-s.refresh:
+		case <-tick.C:
+			if s.clientCount() == 0 {
+				continue
+			}
+		}
+		repo, snap, _, _ := s.current()
+		if repo == nil {
+			continue
+		}
+		fp, _, _, _, err := fingerprint(ctx, repo)
+		if err == nil && snap != nil && fp == snap.Fingerprint {
+			continue
+		}
+		next, err := buildSnapshot(ctx, repo)
+		s.mu.Lock()
+		if s.repo != repo { // switched while building
+			s.mu.Unlock()
+			continue
+		}
+		if err != nil {
+			s.err = err.Error()
+		} else {
+			s.snap, s.err = next, ""
+		}
+		s.version++
+		s.mu.Unlock()
+		s.broadcast("changed")
+	}
+}
+
+func (s *Server) clientCount() int {
+	s.clientsMu.Lock()
+	defer s.clientsMu.Unlock()
+	return len(s.clients)
+}
+
+func (s *Server) broadcast(event string) {
+	s.clientsMu.Lock()
+	defer s.clientsMu.Unlock()
+	for c := range s.clients {
+		select {
+		case c <- event:
+		default:
+		}
+	}
+}
+
+func (s *Server) routes() http.Handler {
+	mux := http.NewServeMux()
+	mux.Handle("GET /", http.FileServerFS(s.assets))
+	mux.HandleFunc("GET /assets/syntax.css", serveSyntaxCSS)
+	mux.HandleFunc("GET /api/health", s.handleHealth)
+	mux.HandleFunc("GET /api/state", s.handleState)
+	mux.HandleFunc("GET /api/rows", s.handleRows)
+	mux.HandleFunc("GET /api/locate", s.handleLocate)
+	mux.HandleFunc("GET /api/search", s.handleSearch)
+	mux.HandleFunc("GET /api/commit", s.handleCommit)
+	mux.HandleFunc("GET /api/diff", s.handleDiff)
+	mux.HandleFunc("GET /api/events", s.handleEvents)
+	mux.HandleFunc("POST /api/open", s.requireHeader(s.handleOpen))
+	mux.HandleFunc("POST /api/shutdown", s.requireHeader(s.handleShutdown))
+	return s.checkHost(mux)
+}
+
+// checkHost rejects requests addressed to any other host name, which blocks
+// DNS-rebinding pages from reading the API.
+func (s *Server) checkHost(next http.Handler) http.Handler {
+	_, port, _ := net.SplitHostPort(s.addr)
+	allowed := map[string]bool{
+		"127.0.0.1:" + port: true, "localhost:" + port: true, "[::1]:" + port: true,
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !allowed[r.Host] {
+			http.Error(w, "forbidden host", http.StatusForbidden)
+			return
+		}
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		next.ServeHTTP(w, r)
+	})
+}
+
+func (s *Server) requireHeader(h http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get(HeaderName) != "1" {
+			http.Error(w, "missing "+HeaderName+" header", http.StatusForbidden)
+			return
+		}
+		h(w, r)
+	}
+}
+
+func writeJSON(w http.ResponseWriter, v any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
+	_ = json.NewEncoder(w).Encode(v)
+}
+
+func writeErr(w http.ResponseWriter, code int, err error) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(code)
+	_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+}
+
+func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, map[string]any{"app": "ggitree", "version": Version, "pid": os.Getpid()})
+}
+
+type stateJSON struct {
+	Version int            `json:"version"`
+	Repo    *repoJSON      `json:"repo"`
+	Head    *gitx.HeadInfo `json:"head,omitempty"`
+	Dirty   int            `json:"dirty"`
+	Total   int            `json:"total"`
+	Error   string         `json:"error,omitempty"`
+}
+
+type repoJSON struct {
+	Name string `json:"name"`
+	Root string `json:"root"`
+}
+
+func (s *Server) handleState(w http.ResponseWriter, r *http.Request) {
+	repo, snap, version, errMsg := s.current()
+	st := stateJSON{Version: version, Error: errMsg}
+	if repo != nil {
+		st.Repo = &repoJSON{Name: repo.Name(), Root: repo.Root}
+	}
+	if snap != nil {
+		st.Head = &snap.Head
+		st.Dirty = snap.Dirty
+		st.Total = len(snap.Rows)
+	}
+	writeJSON(w, st)
+}
+
+func intParam(r *http.Request, name string, def int) int {
+	if v, err := strconv.Atoi(r.URL.Query().Get(name)); err == nil {
+		return v
+	}
+	return def
+}
+
+func (s *Server) handleRows(w http.ResponseWriter, r *http.Request) {
+	_, snap, version, _ := s.current()
+	offset := max(intParam(r, "offset", 0), 0)
+	limit := min(max(intParam(r, "limit", 500), 1), 5000)
+	rows := []RowJSON{}
+	if snap != nil && offset < len(snap.Rows) {
+		rows = snap.Rows[offset:min(offset+limit, len(snap.Rows))]
+	}
+	writeJSON(w, map[string]any{"version": version, "offset": offset, "rows": rows})
+}
+
+func (s *Server) handleLocate(w http.ResponseWriter, r *http.Request) {
+	_, snap, version, _ := s.current()
+	var idx []int
+	for _, sha := range strings.Split(r.URL.Query().Get("sha"), ",") {
+		i := -1
+		if snap != nil && sha != "" {
+			i = snap.Locate(sha)
+		}
+		idx = append(idx, i)
+	}
+	writeJSON(w, map[string]any{"version": version, "indexes": idx})
+}
+
+func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
+	_, snap, version, _ := s.current()
+	matches := []int{}
+	if snap != nil {
+		if m := snap.Search(r.URL.Query().Get("q"), 10_000); m != nil {
+			matches = m
+		}
+	}
+	writeJSON(w, map[string]any{"version": version, "matches": matches})
+}
+
+func (s *Server) handleCommit(w http.ResponseWriter, r *http.Request) {
+	repo, snap, _, _ := s.current()
+	if repo == nil {
+		writeErr(w, http.StatusConflict, errors.New("no repository open"))
+		return
+	}
+	sha := r.URL.Query().Get("sha")
+	d, err := repo.Detail(r.Context(), sha)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err)
+		return
+	}
+	var refs []gitx.Ref
+	if snap != nil {
+		if i := snap.Locate(d.SHA); i >= 0 {
+			refs = snap.Rows[i].Refs
+		}
+	}
+	writeJSON(w, map[string]any{"commit": d, "refs": refs})
+}
+
+func (s *Server) handleDiff(w http.ResponseWriter, r *http.Request) {
+	repo, _, _, _ := s.current()
+	if repo == nil {
+		writeErr(w, http.StatusConflict, errors.New("no repository open"))
+		return
+	}
+	q := r.URL.Query()
+	d, err := repo.Diff(r.Context(), q.Get("sha"), q.Get("path"), q.Get("old"), q.Get("untracked") == "1")
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err)
+		return
+	}
+	writeJSON(w, d)
+}
+
+func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "streaming unsupported", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-store")
+	c := make(chan string, 8)
+	s.clientsMu.Lock()
+	s.clients[c] = struct{}{}
+	s.clientsMu.Unlock()
+	defer func() {
+		s.clientsMu.Lock()
+		delete(s.clients, c)
+		s.clientsMu.Unlock()
+	}()
+	s.requestRefresh() // a page that was away may have missed changes
+
+	fmt.Fprint(w, "retry: 1000\n\n")
+	flusher.Flush()
+	ping := time.NewTicker(25 * time.Second)
+	defer ping.Stop()
+	for {
+		select {
+		case <-r.Context().Done():
+			return
+		case ev := <-c:
+			fmt.Fprintf(w, "event: %s\ndata: {}\n\n", ev)
+			flusher.Flush()
+		case <-ping.C:
+			fmt.Fprint(w, ": ping\n\n")
+			flusher.Flush()
+		}
+	}
+}
+
+func (s *Server) handleOpen(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Path string `json:"path"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<16)).Decode(&body); err != nil || body.Path == "" {
+		writeErr(w, http.StatusBadRequest, errors.New("expected {\"path\": ...}"))
+		return
+	}
+	if err := s.Open(body.Path); err != nil {
+		writeErr(w, http.StatusBadRequest, err)
+		return
+	}
+	repo, _, _, _ := s.current()
+	writeJSON(w, map[string]string{"root": repo.Root})
+}
+
+func (s *Server) handleShutdown(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, map[string]bool{"ok": true})
+	go func() {
+		time.Sleep(100 * time.Millisecond)
+		s.shutdown()
+	}()
+}
