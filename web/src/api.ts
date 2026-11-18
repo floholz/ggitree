@@ -70,6 +70,25 @@ export interface FileDiff {
   hunks: { header: string; lines: DiffLine[] }[] | null;
 }
 
+/** A branch or tag in the branches panel. */
+export interface RefEntry {
+  n: string; // name (remote branches without the remote)
+  h: string; // commit
+  t: number; // commit date, or tag date
+  c?: boolean; // checked out here
+  w?: string; // checked out in another worktree
+  u?: string; // upstream
+  ah?: number; // ahead of upstream
+  bh?: number; // behind upstream
+  g?: boolean; // upstream gone
+}
+
+export interface RefList {
+  local: RefEntry[];
+  remotes: { name: string; branches: RefEntry[] }[];
+  tags: RefEntry[];
+}
+
 export const WORKTREE = "WORKTREE";
 
 export type Scope = "local" | "all";
@@ -93,6 +112,7 @@ export const api = {
     get<{ version: number; offset: number; rows: Row[] }>("api/rows", { offset, limit }),
   locate: (shas: string[]) => get<{ version: number; indexes: number[] }>("api/locate", { sha: shas.join(",") }),
   search: (q: string) => get<{ version: number; matches: number[] }>("api/search", { q }),
+  refs: () => get<{ version: number; refs: RefList }>("api/refs"),
   commit: (sha: string) => get<{ commit: CommitDetail; refs: Ref[] | null }>("api/commit", { sha }),
   diff: (sha: string, f: FileChange) =>
     get<FileDiff>("api/diff", {

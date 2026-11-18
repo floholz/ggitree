@@ -1,7 +1,9 @@
 import "./style.css";
-import { api, Row, Scope, setScope, State, WORKTREE } from "./api";
+import { api, Row, scope, Scope, setScope, State, WORKTREE } from "./api";
 import { DetailsView } from "./details";
 import { HistoryView } from "./history";
+import { RefKindName, RefsView } from "./refs";
+import { toast } from "./util";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -25,6 +27,7 @@ const details = new DetailsView($("details"), {
 const history = new HistoryView(historyEl, {
   onSelect(_i, row) {
     selectedSha = row.h;
+    refs.setSelected(row.h);
     void details.show(row);
   },
   onActivate() {
@@ -32,11 +35,41 @@ const history = new HistoryView(historyEl, {
   },
 });
 
+const REFS_OPEN_KEY = "ggitree.refsOpen";
+const refs = new RefsView($("refs"), {
+  goTo: (sha, label, kind) => void goToRef(sha, label, kind),
+  onToggle(open) {
+    try { localStorage.setItem(REFS_OPEN_KEY, open ? "1" : "0"); } catch { /* private mode */ }
+  },
+});
+try { refs.setOpen(localStorage.getItem(REFS_OPEN_KEY) !== "0"); } catch { /* private mode */ }
+
 // ---------- Loading and live updates ----------
 
 async function goTo(sha: string) {
   const { indexes } = await api.locate([sha]);
   if (indexes[0] >= 0) history.select(indexes[0], { scroll: "center" });
+}
+
+/** Selects a branch's or tag's commit, switching to All when Local hides it. */
+async function goToRef(sha: string, label: string, kind: RefKindName) {
+  let { indexes } = await api.locate([sha]);
+  if (indexes[0] < 0 && scope === "local") {
+    chooseScope("all");
+    await whenIdle();
+    ({ indexes } = await api.locate([sha]));
+    if (indexes[0] >= 0) toast(`Showing all branches to reach ${label}`);
+  }
+  if (indexes[0] < 0) {
+    toast(`The ${kind} ${label} is outside the loaded history`);
+    return;
+  }
+  history.select(indexes[0], { scroll: "center" });
+  historyEl.focus();
+}
+
+async function whenIdle() {
+  while (reloading) await reloading;
 }
 
 function showState(st: State) {
@@ -72,6 +105,7 @@ async function loadFresh() {
   selectedSha = "";
   history.reset(st.total, st.head?.sha ?? "");
   history.scrollRowTo(0, 0);
+  void refs.load();
   await runSearch();
   if (!st.total) return;
   const { indexes } = await api.locate([st.head?.sha ?? ""]);
@@ -91,6 +125,7 @@ async function reloadKeep() {
   const st = await api.state();
   if (st.repo?.root !== state.repo?.root) return loadFresh();
   showState(st);
+  void refs.load();
   const { indexes } = await api.locate([anchor?.h ?? "", prevSelected]);
   history.reset(st.total, st.head?.sha ?? "");
   // Stay at the top when we were there, so new commits come into view.
@@ -253,7 +288,7 @@ document.addEventListener("keydown", (e) => {
     search.select();
     return;
   }
-  if (e.target === search || e.ctrlKey || e.metaKey || e.altKey) return;
+  if (e.target instanceof HTMLInputElement || e.ctrlKey || e.metaKey || e.altKey) return;
   const keys: Record<string, () => void> = {
     ArrowDown: () => history.move(1),
     j: () => history.move(1),
@@ -268,6 +303,8 @@ document.addEventListener("keydown", (e) => {
     "[": () => details.stepFile(-1),
     Escape: () => { details.back(); },
     "/": () => { search.focus(); search.select(); },
+    b: () => refs.toggle(),
+    B: () => refs.focusFilter(),
     h: () => void jumpHead(),
     H: () => void jumpHead(),
   };
@@ -320,6 +357,37 @@ splitter.addEventListener("pointerdown", (e) => {
   };
   splitter.addEventListener("pointermove", onMove);
   splitter.addEventListener("pointerup", onUp);
+});
+
+// The branches panel's height, dragged with the line under it.
+const REFS_H_KEY = "ggitree.refsHeight";
+const refsEl = $("refs");
+const refsSplitter = $("refs-splitter");
+try {
+  const h = Number(localStorage.getItem(REFS_H_KEY));
+  if (h > 0) refsEl.style.setProperty("--refs-h", `${h}px`);
+} catch { /* private mode */ }
+
+refsSplitter.addEventListener("pointerdown", (e) => {
+  if (!refs.open) return;
+  e.preventDefault();
+  refsSplitter.setPointerCapture(e.pointerId);
+  refsSplitter.classList.add("drag");
+  const top = refsEl.getBoundingClientRect().top;
+  const maxH = refsEl.parentElement!.clientHeight - 80;
+  let h = 0;
+  const onMove = (ev: PointerEvent) => {
+    h = Math.round(Math.min(maxH, Math.max(70, ev.clientY - top)));
+    refsEl.style.setProperty("--refs-h", `${h}px`);
+  };
+  const onUp = () => {
+    refsSplitter.classList.remove("drag");
+    refsSplitter.removeEventListener("pointermove", onMove);
+    refsSplitter.removeEventListener("pointerup", onUp);
+    if (h) try { localStorage.setItem(REFS_H_KEY, String(h)); } catch { /* private mode */ }
+  };
+  refsSplitter.addEventListener("pointermove", onMove);
+  refsSplitter.addEventListener("pointerup", onUp);
 });
 
 // ---------- Start ----------

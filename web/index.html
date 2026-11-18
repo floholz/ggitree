@@ -30,7 +30,11 @@
       <button class="btn" id="jump-head" title="Select the checked-out commit (H)">HEAD</button>
     </header>
     <main class="body" id="body">
-      <section class="history" id="history" tabindex="0" aria-label="Commit history"></section>
+      <div class="pane-left">
+        <section class="refs-panel" id="refs" aria-label="Branches and tags"></section>
+        <div class="refs-splitter" id="refs-splitter" role="separator" aria-orientation="horizontal" tabindex="-1"></div>
+        <section class="history" id="history" tabindex="0" aria-label="Commit history"></section>
+      </div>
       <div class="splitter" id="splitter" role="separator" aria-orientation="horizontal" tabindex="-1"></div>
       <section class="details" id="details" aria-label="Commit details"></section>
     </main>

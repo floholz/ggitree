@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -282,4 +283,130 @@ func CountStatus(status string) int {
 		}
 	}
 	return n
+}
+
+// RefEntry is one branch or tag in the ref list.
+type RefEntry struct {
+	Name     string `json:"n"`           // short name; remote branches without the remote
+	SHA      string `json:"h"`           // the commit it points at
+	Time     int64  `json:"t"`           // commit date, or tag date for annotated tags
+	Current  bool   `json:"c,omitempty"` // checked out in this worktree
+	Worktree string `json:"w,omitempty"` // checked out in another worktree
+	Upstream string `json:"u,omitempty"` // tracked remote branch, e.g. origin/main
+	Ahead    int    `json:"ah,omitempty"`
+	Behind   int    `json:"bh,omitempty"`
+	Gone     bool   `json:"g,omitempty"` // the upstream no longer exists
+}
+
+// RemoteRefs are the branches of one remote.
+type RemoteRefs struct {
+	Name     string     `json:"name"`
+	Branches []RefEntry `json:"branches"`
+}
+
+// RefList is every branch and tag, grouped for the branches panel.
+type RefList struct {
+	Local   []RefEntry   `json:"local"`
+	Remotes []RemoteRefs `json:"remotes"`
+	Tags    []RefEntry   `json:"tags"`
+}
+
+// ListRefs returns local branches by name, remote branches by remote and name,
+// and tags newest first.
+func (r *Repo) ListRefs(ctx context.Context) (RefList, error) {
+	list := RefList{Local: []RefEntry{}, Remotes: []RemoteRefs{}, Tags: []RefEntry{}}
+	out, err := r.git(ctx, "for-each-ref",
+		"--format=%(refname)%1f%(objectname)%1f%(*objectname)%1f%(creatordate:unix)%1f%(upstream:short)%1f%(upstream:track,nobracket)",
+		"refs/heads", "refs/remotes", "refs/tags")
+	if err != nil {
+		return list, err
+	}
+	head, _ := r.Head(ctx)
+	others := r.otherWorktreeBranches(ctx)
+	remoteNames := r.remoteNames(ctx)
+	byRemote := map[string]int{}
+	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
+		f := strings.Split(line, "\x1f")
+		if len(f) != 6 {
+			continue
+		}
+		e := RefEntry{SHA: f[1]}
+		if f[2] != "" { // annotated tag: the tagged commit
+			e.SHA = f[2]
+		}
+		e.Time, _ = strconv.ParseInt(f[3], 10, 64)
+		switch name := f[0]; {
+		case strings.HasPrefix(name, "refs/heads/"):
+			e.Name = strings.TrimPrefix(name, "refs/heads/")
+			e.Current = e.Name == head.Branch
+			e.Worktree = others[e.Name]
+			e.Upstream = f[4]
+			e.Ahead, e.Behind, e.Gone = parseTrack(f[5])
+			list.Local = append(list.Local, e)
+		case strings.HasPrefix(name, "refs/remotes/"):
+			short := strings.TrimPrefix(name, "refs/remotes/")
+			if strings.HasSuffix(short, "/HEAD") {
+				continue
+			}
+			remote := remoteOf(short, remoteNames)
+			e.Name = strings.TrimPrefix(short, remote+"/")
+			i, ok := byRemote[remote]
+			if !ok {
+				i = len(list.Remotes)
+				byRemote[remote] = i
+				list.Remotes = append(list.Remotes, RemoteRefs{Name: remote})
+			}
+			list.Remotes[i].Branches = append(list.Remotes[i].Branches, e)
+		case strings.HasPrefix(name, "refs/tags/"):
+			e.Name = strings.TrimPrefix(name, "refs/tags/")
+			list.Tags = append(list.Tags, e)
+		}
+	}
+	// for-each-ref already sorts by refname; tags read better newest first.
+	sort.SliceStable(list.Tags, func(i, j int) bool { return list.Tags[i].Time > list.Tags[j].Time })
+	return list, nil
+}
+
+func (r *Repo) remoteNames(ctx context.Context) []string {
+	out, err := r.git(ctx, "remote")
+	if err != nil {
+		return nil
+	}
+	return strings.Fields(out)
+}
+
+// remoteOf finds which remote a remote-tracking name belongs to. Remote names
+// may contain slashes, so the longest matching remote wins.
+func remoteOf(short string, remotes []string) string {
+	best := ""
+	for _, rm := range remotes {
+		if strings.HasPrefix(short, rm+"/") && len(rm) > len(best) {
+			best = rm
+		}
+	}
+	if best == "" {
+		best, _, _ = strings.Cut(short, "/")
+	}
+	return best
+}
+
+// parseTrack reads %(upstream:track,nobracket): "ahead 1, behind 2", "gone" or "".
+func parseTrack(s string) (ahead, behind int, gone bool) {
+	if s == "gone" {
+		return 0, 0, true
+	}
+	for _, part := range strings.Split(s, ",") {
+		k, v, ok := strings.Cut(strings.TrimSpace(part), " ")
+		if !ok {
+			continue
+		}
+		n, _ := strconv.Atoi(v)
+		switch k {
+		case "ahead":
+			ahead = n
+		case "behind":
+			behind = n
+		}
+	}
+	return
 }

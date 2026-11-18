@@ -8,6 +8,8 @@ A JetBrains-style commit graph for your repository, served as a local web page s
 - Uncommitted changes as their own row at the top
 - Live: updates within a moment when you or an agent commits, checks out or edits files
 - Marks branches that are checked out in other worktrees
+- A branches panel above the graph lists local branches (with ahead/behind counts), remote branches
+  and tags; click one to jump to its commit
 - Local branches by default; **All** adds every remote branch and tag
 - Read-only: it never changes your repository
 
@@ -44,8 +46,13 @@ ggitree stop
 | `Esc` | Back from the diff to the file list |
 | `/` or `Ctrl+F` | Search; `Enter` / `Shift+Enter` for next / previous match |
 | `H` | Jump to the checked-out commit |
+| `B` | Show or hide the branches panel |
+| `Shift+B` | Filter branches and tags (`Enter` jumps to the first match) |
 
 Search matches commit messages, authors, commit ids and ref names.
+
+Clicking a remote branch or tag that the **Local** view doesn't include switches to **All** first. Drag
+the line under the branches panel to resize it; its size and whether it is open are remembered.
 
 ## In T3 Code's right panel
 

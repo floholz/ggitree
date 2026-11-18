@@ -131,6 +131,79 @@ button { font: inherit; color: inherit; }
 .app.wide .splitter::after { inset: 0 2px; }
 .splitter:hover::after, .splitter.drag::after { background: var(--accent); opacity: .5; }
 
+/* Left pane: branches panel above the history */
+.pane-left { display: flex; flex-direction: column; min-height: 0; min-width: 0; container: left / inline-size; }
+.pane-left .history { flex: 1 1 0; }
+
+/* Branches panel */
+.refs-panel {
+  flex: none; height: var(--refs-h, 150px); min-height: 0;
+  display: flex; flex-direction: column; background: var(--bg-soft);
+}
+.refs-panel.collapsed { height: auto; }
+.refs-panel.collapsed .refs-cols, .refs-panel.collapsed .refs-filter { display: none; }
+.refs-panel.collapsed + .refs-splitter { height: 1px; cursor: default; pointer-events: none; }
+.refs-splitter { flex: none; height: 5px; background: var(--border); cursor: row-resize; position: relative; }
+.refs-splitter::after { content: ""; position: absolute; inset: 2px 0 0; background: var(--bg); }
+.refs-splitter:hover::after, .refs-splitter.drag::after { background: var(--accent); opacity: .5; }
+.refs-head { display: flex; align-items: center; gap: 8px; padding: 3px 8px 3px 4px; min-height: 28px; }
+.refs-summary {
+  display: flex; align-items: baseline; gap: 8px; min-width: 0; overflow: hidden;
+  border: 0; background: none; cursor: pointer; padding: 2px 4px; border-radius: 4px; white-space: nowrap;
+}
+.refs-summary:hover { background: var(--bg-hover); }
+.refs-summary .chev { width: 10px; color: var(--fg-muted); font-size: 10px; }
+.refs-title { font-weight: 600; font-size: 12px; }
+.refs-count { font-size: 11px; color: var(--fg-muted); }
+.refs-filter {
+  margin-left: auto; width: 180px; min-width: 70px; flex: 0 1 auto; height: 22px; padding: 0 7px;
+  border: 1px solid var(--border); border-radius: 5px; background: var(--bg); color: var(--fg);
+  font: 12px var(--font); outline: none;
+}
+.refs-filter:focus { border-color: var(--accent); }
+.refs-cols {
+  flex: 1; min-height: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+  border-top: 1px solid var(--border);
+}
+.refs-col { display: flex; flex-direction: column; min-height: 0; min-width: 0; }
+.refs-col + .refs-col { border-left: 1px solid var(--border); }
+.refs-col-head {
+  display: flex; justify-content: space-between; gap: 6px; padding: 3px 10px 2px;
+  font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--fg-muted);
+  white-space: nowrap; overflow: hidden;
+}
+.refs-col-head .n { font-weight: 500; font-variant-numeric: tabular-nums; }
+.ref-list { list-style: none; margin: 0; padding: 0 0 4px; overflow-y: auto; flex: 1; min-height: 0; }
+.ref-item {
+  display: flex; align-items: center; gap: 5px; height: 21px; padding: 0 10px;
+  cursor: pointer; white-space: nowrap; font-size: 12px; user-select: none;
+}
+.ref-item:hover { background: var(--bg-hover); }
+.ref-item.at-sel { background: var(--sel); }
+.ref-item svg { flex: none; width: 12px; height: 12px; color: var(--fg-muted); }
+.ref-item.k-tag svg { color: var(--lane-6); }
+.ref-item .ref-name { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.ref-item.current .ref-name { font-weight: 700; }
+.ref-item.current svg { color: var(--accent); }
+.ref-item.k-remote-branch .ref-name { color: var(--fg-muted); }
+.ref-extra { margin-left: auto; display: flex; gap: 5px; flex: none; font-size: 11px; color: var(--fg-muted); font-variant-numeric: tabular-nums; }
+.ref-extra .ahead { color: var(--add-fg); }
+.ref-extra .behind { color: var(--del-fg); }
+.ref-extra .gone { color: var(--del-fg); font-style: italic; }
+.ref-group { padding: 4px 10px 1px; font-size: 11px; font-weight: 600; color: var(--fg-faint); }
+.ref-empty { padding: 3px 10px; font-size: 11.5px; color: var(--fg-faint); font-style: italic; }
+/* Too narrow for three columns: one list, one scroll. */
+@container left (max-width: 440px) {
+  .refs-cols { display: block; overflow-y: auto; }
+  .refs-col { display: block; }
+  .refs-col.no-match { display: none; }
+  .refs-col + .refs-col { border-left: 0; border-top: 1px solid var(--border); }
+  .refs-col-head { position: sticky; top: 0; background: var(--bg-soft); z-index: 1; }
+  .ref-list { overflow: visible; }
+  .refs-filter { width: 110px; }
+}
+@container left (max-width: 320px) { .refs-count { display: none; } }
+
 /* History list */
 .history { position: relative; overflow: hidden; outline: none; min-height: 0; min-width: 0; }
 .scroller { position: absolute; inset: 0; overflow-y: auto; overflow-x: hidden; }

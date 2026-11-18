@@ -239,6 +239,7 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("GET /api/rows", s.handleRows)
 	mux.HandleFunc("GET /api/locate", s.handleLocate)
 	mux.HandleFunc("GET /api/search", s.handleSearch)
+	mux.HandleFunc("GET /api/refs", s.handleRefs)
 	mux.HandleFunc("GET /api/commit", s.handleCommit)
 	mux.HandleFunc("GET /api/diff", s.handleDiff)
 	mux.HandleFunc("GET /api/events", s.handleEvents)
@@ -360,6 +361,22 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writeJSON(w, map[string]any{"version": version, "matches": matches})
+}
+
+func (s *Server) handleRefs(w http.ResponseWriter, r *http.Request) {
+	s.mu.RLock()
+	repo, version := s.repo, s.version
+	s.mu.RUnlock()
+	if repo == nil {
+		writeJSON(w, map[string]any{"version": version, "refs": gitx.RefList{}})
+		return
+	}
+	list, err := repo.ListRefs(r.Context())
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, map[string]any{"version": version, "refs": list})
 }
 
 func (s *Server) handleCommit(w http.ResponseWriter, r *http.Request) {
