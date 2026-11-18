@@ -5,6 +5,8 @@
 //	ggitree serve [path]  run the server in the foreground
 //	ggitree stop          stop the running server
 //	ggitree status        print whether a server is running
+//	ggitree t3-install    add the action to T3 Code for every project
+//	ggitree t3-uninstall  take it out again
 package main
 
 import (
@@ -24,6 +26,7 @@ import (
 	"time"
 
 	"github.com/floholz/ggitree/internal/server"
+	"github.com/floholz/ggitree/internal/t3setup"
 	"github.com/floholz/ggitree/web"
 )
 
@@ -37,6 +40,7 @@ func main() {
 	cmd, args := os.Args[1], os.Args[2:]
 	fs := flag.NewFlagSet(cmd, flag.ExitOnError)
 	addr := fs.String("addr", envOr("GGITREE_ADDR", defaultAddr), "address to listen on / connect to")
+	t3Dir := fs.String("t3-dir", t3setup.DefaultDir(), "T3 Code's userdata folder (t3-install, t3-uninstall)")
 	_ = fs.Parse(args)
 	path := fs.Arg(0)
 	if path == "" {
@@ -53,6 +57,10 @@ func main() {
 		err = stop(*addr)
 	case "status":
 		err = status(*addr)
+	case "t3-install":
+		err = t3setup.Install(t3setup.Config{Dir: *t3Dir, PreviewURL: "http://" + *addr, Log: os.Stdout})
+	case "t3-uninstall":
+		err = t3setup.Uninstall(t3setup.Config{Dir: *t3Dir, Log: os.Stdout})
 	case "version", "--version", "-v":
 		fmt.Println("ggitree", server.Version)
 	case "help", "--help", "-h":
@@ -76,6 +84,10 @@ commands:
   serve [path]  run the server in the foreground
   stop          stop the running server
   status        report whether the server is running
+  t3-install    add a "GGitree" action and the Ctrl+Alt+G shortcut to T3 Code
+                for every project; safe to run again (--t3-dir to change the folder)
+  t3-uninstall  remove them again, restoring T3 Code's files from the backup
+                the first t3-install made
   version       print the version
 
 The address defaults to `+defaultAddr+` or $GGITREE_ADDR.

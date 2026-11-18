@@ -49,34 +49,28 @@ Search matches commit messages, authors, commit ids and ref names.
 
 ## In T3 Code's right panel
 
-Add an action in T3 Code with the fields below. The settings page only edits one project's actions
-(Settings → Projects → *project* → Actions, or **Add Action** in a thread's top bar). To give every project
-the action, add it to the top-level `defaultProjectScripts` array in `~/.t3/userdata/settings.json`, which
-T3 Code reloads on save:
+`make install` sets this up: it runs `ggitree t3-install`, which adds a **GGitree** action to every project
+and binds it to `Ctrl+Alt+G` (`mod+alt+g`). T3 Code picks the change up without a restart.
 
-```json
-"defaultProjectScripts": [
-  {
-    "id": "ggitree",
-    "name": "Git tree",
-    "command": "ggitree open; exit",
-    "icon": "play",
-    "runOnWorktreeCreate": false,
-    "stopOnSettle": true,
-    "previewUrl": "http://127.0.0.1:4747",
-    "autoOpenPreview": true
-  }
-]
-```
+- **Where it goes.** T3 Code's settings page only edits one project's actions, so `t3-install` edits
+  `~/.t3/userdata/settings.json` directly. It puts the action in the top-level `defaultProjectScripts` list
+  that all projects share, and also into each project's own list, because a project with its own list
+  ignores the shared one. The shortcut goes in `keybindings.json`.
+- **Rerunning.** Running it again only fixes what is missing or out of date, so after a T3 Code update
+  changes the format, fix `internal/t3setup` and run `make install` again. A project added later with its
+  own action list needs a rerun too. A shortcut you changed in T3 Code is kept.
+- **Backup.** The first run copies both files to `~/.t3/userdata/ggitree-backup/`. Later runs keep that copy.
+- **Uninstall.** `make uninstall` (or `ggitree t3-uninstall`) puts the backup back if T3 Code hasn't changed
+  the file since the last install. If it has, it removes only ggitree's entries, so your other changes stay,
+  and moves the old backup to `ggitree-backup-<date>`.
 
-A project with its own action list uses that list instead of the defaults, so add the action to those
-projects as well. The shortcut is a separate entry in `~/.t3/userdata/keybindings.json`:
-`{ "key": "mod+alt+g", "command": "script.ggitree.run" }`.
+`--t3-dir` points both commands at another folder (default `$T3CODE_HOME/userdata`, else
+`~/.t3/userdata`). The action's fields, if you'd rather add it by hand:
 
 | Field | Value |
 | --- | --- |
-| Name | `Git tree` |
-| Keybinding | e.g. `Ctrl+Alt+G` |
+| Name | `GGitree` |
+| Keybinding | `Ctrl+Alt+G` |
 | Command | `ggitree open; exit` |
 | Preview URL | `http://127.0.0.1:4747` |
 | Stop this action when the thread settles | on |
