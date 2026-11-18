@@ -19,6 +19,34 @@ const historyEl = $("history");
 let state: State | null = null;
 let selectedSha = "";
 
+// Follow mode keeps the newest change selected: the uncommitted changes when
+// there are any, otherwise HEAD. Selecting anything by hand turns it off.
+const FOLLOW_KEY = "ggitree.follow";
+const followBtn = $("follow");
+let follow = false;
+try { follow = localStorage.getItem(FOLLOW_KEY) === "1"; } catch { /* private mode */ }
+
+function setFollow(on: boolean) {
+  if (on === follow) return;
+  follow = on;
+  followBtn.setAttribute("aria-pressed", String(on));
+  try { localStorage.setItem(FOLLOW_KEY, on ? "1" : "0"); } catch { /* private mode */ }
+  if (on && state) void selectNewest(state);
+}
+
+/** Selects the uncommitted changes, or HEAD when the tree is clean. */
+async function selectNewest(st: State) {
+  if (!st.total) return;
+  let i = 0;
+  if (st.dirty === 0) i = Math.max((await api.locate([st.head?.sha ?? ""])).indexes[0], 0);
+  history.select(i, { silent: true, scroll: "nearest" });
+  const row = await history.load(i);
+  if (!row) return;
+  selectedSha = row.h;
+  refs.setSelected(row.h);
+  void details.show(row, { force: row.h === WORKTREE });
+}
+
 const details = new DetailsView($("details"), {
   goTo: (sha) => void goTo(sha),
   laneColor: (c) => history.laneColor(c),
@@ -47,12 +75,14 @@ try { refs.setOpen(localStorage.getItem(REFS_OPEN_KEY) !== "0"); } catch { /* pr
 // ---------- Loading and live updates ----------
 
 async function goTo(sha: string) {
+  setFollow(false);
   const { indexes } = await api.locate([sha]);
   if (indexes[0] >= 0) history.select(indexes[0], { scroll: "center" });
 }
 
 /** Selects a branch's or tag's commit, switching to All when Local hides it. */
 async function goToRef(sha: string, label: string, kind: RefKindName) {
+  setFollow(false);
   let { indexes } = await api.locate([sha]);
   if (indexes[0] < 0 && scope === "local") {
     chooseScope("all");
@@ -132,6 +162,7 @@ async function reloadKeep() {
   if (wasAtTop) history.scrollRowTo(0, 0);
   else if (indexes[0] >= 0) history.scrollRowTo(indexes[0], -anchorOffset);
   await runSearch();
+  if (follow) return selectNewest(st);
 
   let sel = indexes[1];
   if (sel < 0 && prevSelected === WORKTREE) sel = -1; // changes were committed: follow HEAD
@@ -214,6 +245,7 @@ function updateCount() {
 
 function stepMatch(delta: number) {
   if (!matches.length) return;
+  setFollow(false);
   if (matchPos < 0) {
     // Start from the selection, so Enter finds the next match below it.
     const sel = history.selectedIndex;
@@ -253,8 +285,15 @@ search.addEventListener("keydown", (e) => {
 $("search-next").onclick = () => stepMatch(1);
 $("search-prev").onclick = () => stepMatch(-1);
 $("jump-head").onclick = () => void jumpHead();
+followBtn.onclick = () => setFollow(!follow);
+followBtn.setAttribute("aria-pressed", String(follow));
+// A click on a row picks that commit by hand.
+historyEl.addEventListener("mousedown", (e) => {
+  if ((e.target as HTMLElement).closest(".row")) setFollow(false);
+});
 
 async function jumpHead() {
+  setFollow(false);
   if (state?.head?.sha) await goTo(state.head.sha);
   historyEl.focus();
 }
@@ -289,15 +328,18 @@ document.addEventListener("keydown", (e) => {
     return;
   }
   if (e.target instanceof HTMLInputElement || e.ctrlKey || e.metaKey || e.altKey) return;
+  const byHand = (f: () => void) => () => { setFollow(false); f(); };
   const keys: Record<string, () => void> = {
-    ArrowDown: () => history.move(1),
-    j: () => history.move(1),
-    ArrowUp: () => history.move(-1),
-    k: () => history.move(-1),
-    PageDown: () => history.move(history.pageSize()),
-    PageUp: () => history.move(-history.pageSize()),
-    Home: () => history.select(0),
-    End: () => history.select(history.count - 1),
+    ArrowDown: byHand(() => history.move(1)),
+    j: byHand(() => history.move(1)),
+    ArrowUp: byHand(() => history.move(-1)),
+    k: byHand(() => history.move(-1)),
+    PageDown: byHand(() => history.move(history.pageSize())),
+    PageUp: byHand(() => history.move(-history.pageSize())),
+    Home: byHand(() => history.select(0)),
+    End: byHand(() => history.select(history.count - 1)),
+    f: () => setFollow(!follow),
+    F: () => setFollow(!follow),
     Enter: () => details.stepFile(1),
     "]": () => details.stepFile(1),
     "[": () => details.stepFile(-1),

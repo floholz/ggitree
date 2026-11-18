@@ -28,6 +28,10 @@
         <button id="scope-all" title="All branches, including every remote branch, and tags">All</button>
       </div>
       <button class="btn" id="jump-head" title="Select the checked-out commit (H)">HEAD</button>
+      <button class="btn follow" id="follow" aria-pressed="false" aria-label="Follow the newest change"
+        title="Follow: keep the newest change selected, the uncommitted changes or else HEAD, as files change and commits land (F). Selecting another commit stops it.">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="8" cy="8" r="4.5"/><circle cx="8" cy="8" r="1.4" fill="currentColor" stroke="none"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2"/></svg>
+      </button>
     </header>
     <main class="body" id="body">
       <div class="pane-left">

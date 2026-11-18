@@ -9,6 +9,8 @@ A JetBrains-style commit graph for your repository, served as a local web page s
 - Commit details with changed files, and syntax-highlighted diffs
 - Uncommitted changes as their own row at the top
 - Live: updates within a moment when you or an agent commits, checks out or edits files
+- **Follow** keeps the newest change selected (the uncommitted changes, or else HEAD), so you can watch
+  an agent work without touching the panel; selecting any commit by hand turns it off
 - Marks branches that are checked out in other worktrees
 - A branches panel above the graph lists local branches (with ahead/behind counts), remote branches
   and tags; click one to jump to its commit
@@ -48,6 +50,7 @@ ggitree stop
 | `Esc` | Back from the diff to the file list |
 | `/` or `Ctrl+F` | Search; `Enter` / `Shift+Enter` for next / previous match |
 | `H` | Jump to the checked-out commit |
+| `F` | Follow the newest change (same as the target button next to **HEAD**) |
 | `B` | Show or hide the branches panel |
 | `Shift+B` | Filter branches and tags (`Enter` jumps to the first match) |
 

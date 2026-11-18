@@ -107,6 +107,9 @@ button { font: inherit; color: inherit; }
 }
 .icon-btn:hover, .btn:hover { background: var(--bg-hover); color: var(--fg); }
 .btn { border-color: var(--border); font-size: 12px; font-weight: 600; flex: none; }
+.btn.follow { display: grid; place-items: center; padding: 0 5px; }
+.btn.follow svg { width: 15px; height: 15px; }
+.btn.follow[aria-pressed="true"] { background: var(--sel); border-color: var(--accent); color: var(--accent); }
 @container (max-width: 560px) {
   .toolbar { gap: 6px; padding: 6px 8px; }
   .search .icon-btn { display: none; }
