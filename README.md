@@ -60,7 +60,11 @@ come later.
 
 ## Install
 
-Requires Go 1.27+ and git.
+Prebuilt binaries for Linux, macOS and Windows are on the
+[releases page](https://github.com/floholz/ggitree/releases). Put `ggitree` on your `PATH` (for example as
+`~/.local/bin/ggitree`), then run `ggitree t3-install` to add the T3 Code action.
+
+To build from source instead, you need Go 1.27+ and git:
 
 ```sh
 make install            # builds, copies ggitree to ~/.local/bin and adds the T3 Code action

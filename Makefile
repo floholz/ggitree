@@ -1,9 +1,23 @@
 PREFIX ?= $(HOME)/.local
+# The tag on this commit, else the nearest tag plus commits (v1.1.0-3-gabc1234), else "dev".
+VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
+LDFLAGS := -s -w -X github.com/floholz/ggitree/internal/server.Version=$(VERSION)
+PLATFORMS := linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64
 
-.PHONY: build web watch test run screenshot install install-t3 install-service uninstall uninstall-t3 clean
+.PHONY: build web watch test run screenshot install install-t3 install-service uninstall uninstall-t3 dist clean
 
 build: web
-	go build -o ggitree .
+	go build -trimpath -ldflags "$(LDFLAGS)" -o ggitree .
+
+# Release binaries for every platform, plus their checksums, in dist/.
+dist: web
+	mkdir -p dist
+	for p in $(PLATFORMS); do \
+		os=$${p%/*}; arch=$${p#*/}; ext=; [ $$os = windows ] && ext=.exe; \
+		CGO_ENABLED=0 GOOS=$$os GOARCH=$$arch go build -trimpath -ldflags "$(LDFLAGS)" \
+			-o dist/ggitree-$(VERSION)-$$os-$$arch$$ext . || exit 1; \
+	done
+	cd dist && sha256sum ggitree-$(VERSION)-* > SHA256SUMS-$(VERSION)
 
 web:
 	go generate ./web
