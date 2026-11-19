@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Rebuilds docs/screenshot.png: makes the demo repository, shows it with a
-# private ggitree server and captures the page at side-panel size.
+# private ggitree server and captures the page at side-panel size, with Auto
+# fetch and Follow switched on.
 #
 #   tools/demo/screenshot.sh [ggitree binary]
 #
@@ -23,5 +24,6 @@ for _ in $(seq 50); do
 done
 
 mkdir -p "$top/docs"
-node "$here/screenshot.mjs" "http://$addr/" "$top/docs/screenshot.png" 600 900 dark
+node "$here/screenshot.mjs" "http://$addr/" "$top/docs/screenshot.png" 600 900 dark \
+	"ggitree.autoFetch=1,ggitree.follow=1"
 echo "wrote docs/screenshot.png"

@@ -2,7 +2,10 @@
 // `chrome --screenshot` never finishes on ggitree, because the page keeps its
 // live-update connection open.
 //
-//   node screenshot.mjs <url> <out.png> [width] [height] [light|dark]
+//   node screenshot.mjs <url> <out.png> [width] [height] [light|dark] [key=value,...]
+//
+// The last argument presets the page's localStorage, e.g. "ggitree.follow=1" to
+// show a toggle switched on.
 //
 // Chrome is $CHROME, or the first of a few usual names on PATH.
 
@@ -10,9 +13,9 @@ import { spawn, execFileSync } from "node:child_process";
 import { writeFileSync } from "node:fs";
 import { setTimeout as sleep } from "node:timers/promises";
 
-const [url, out, w = "600", h = "900", scheme = "dark"] = process.argv.slice(2);
+const [url, out, w = "600", h = "900", scheme = "dark", storage = ""] = process.argv.slice(2);
 if (!url || !out) {
-  console.error("usage: node screenshot.mjs <url> <out.png> [width] [height] [light|dark]");
+  console.error("usage: node screenshot.mjs <url> <out.png> [width] [height] [light|dark] [key=value,...]");
   process.exit(2);
 }
 
@@ -60,6 +63,13 @@ try {
   });
 
   await send("Runtime.enable");
+  await send("Page.enable");
+  if (storage) {
+    const entries = storage.split(",").map((kv) => kv.split("="));
+    await send("Page.addScriptToEvaluateOnNewDocument", {
+      source: `for (const [k, v] of ${JSON.stringify(entries)}) localStorage.setItem(k, v);`,
+    });
+  }
   await send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-color-scheme", value: scheme }] });
   await send("Emulation.setDeviceMetricsOverride", { width: +w, height: +h, deviceScaleFactor: 2, mobile: false });
   await send("Page.navigate", { url });
