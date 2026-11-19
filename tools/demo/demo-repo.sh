@@ -144,6 +144,9 @@ git switch -q feature/plugins
 commit "$S" 60 src/plugins/shortcode.go "plugins: a shortcode plugin"
 commit "$S" 20 src/plugins/hooks.go "plugins: pass the page context to hooks"
 
+# Fetched once, so the Branches header shows a recent fetch, not "never".
+git fetch -q --all
+
 git worktree add -q "$root/orbit-docs" docs/getting-started
 
 # Work in progress in the main checkout.
