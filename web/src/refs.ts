@@ -118,7 +118,8 @@ export class RefsView {
     const local = this.list.local.filter((b) => match(b.n));
     const localCol = column("Local", local.length, this.list.local.length);
     const localList = el("ul", "ref-list");
-    for (const b of local.slice(0, MAX_PER_COLUMN)) localList.append(this.localItem(b));
+    const onRemote = new Set(this.list.remotes.flatMap((r) => r.branches.map((b) => b.n)));
+    for (const b of local.slice(0, MAX_PER_COLUMN)) localList.append(this.localItem(b, !b.u && !onRemote.has(b.n)));
     more(localList, local.length);
     if (!this.list.local.length) localList.append(el("li", "ref-empty", "No local branches"));
     localCol.append(localList);
@@ -157,7 +158,8 @@ export class RefsView {
     this.setSelected(this.selectedSha);
   }
 
-  private localItem(b: RefEntry): HTMLElement {
+  /** localOnly: no upstream and no remote branch of that name, like the graph's dashed label. */
+  private localItem(b: RefEntry, localOnly: boolean): HTMLElement {
     const li = item(b, b.n, "branch", ICON_BRANCH);
     if (b.c) li.classList.add("current");
     const extra = el("span", "ref-extra");
@@ -165,6 +167,7 @@ export class RefsView {
     if (b.ah) extra.append(el("span", "ahead", `↑${b.ah}`));
     if (b.bh) extra.append(el("span", "behind", `↓${b.bh}`));
     if (b.g) extra.append(el("span", "gone", "gone"));
+    else if (localOnly) extra.append(el("span", "local-only", "local"));
     if (extra.childElementCount) li.append(extra);
     let title = `Branch ${b.n}`;
     if (b.c) title += " (checked out here)";
@@ -174,6 +177,8 @@ export class RefsView {
       if (b.g) title += ", which no longer exists";
       else if (b.ah || b.bh) title += `: ${b.ah ?? 0} ahead, ${b.bh ?? 0} behind`;
       else title += ", up to date";
+    } else if (localOnly) {
+      title += "\nOnly local, not on any remote";
     }
     li.title = title + `\nLast commit ${shortAge(b.t)}`;
     return li;

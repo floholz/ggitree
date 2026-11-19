@@ -7,9 +7,13 @@ export interface Ref {
   k: RefKind;
   c?: boolean; // checked out here
   w?: string; // checked out in another worktree
+  lo?: boolean; // local branch that no remote has
 }
 
-/** One history row. Edges are [x1, y1, x2, y2, color] with y in 0 (top), 1 (dot), 2 (bottom). */
+/**
+ * One history row. Edges are [x1, y1, x2, y2, color, dashed] with y in 0 (top), 1 (dot), 2 (bottom);
+ * dashed edges leave a commit that is not on a remote yet.
+ */
 export interface Row {
   h: string;
   p: string[];
@@ -21,8 +25,14 @@ export interface Row {
   l: number;
   c: number;
   w: number;
-  e: [number, number, number, number, number][];
+  e: [number, number, number, number, number, number][];
+  x?: 1 | 2; // UNPUSHED or GONE; missing means pushed
 }
+
+/** Row.x: on no remote yet (as of the last fetch). */
+export const UNPUSHED = 1;
+/** Row.x: unpushed, but its branch's upstream was deleted: pushed once, likely merged. */
+export const GONE = 2;
 
 export interface State {
   version: number;

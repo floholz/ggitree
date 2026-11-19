@@ -193,6 +193,7 @@ button { font: inherit; color: inherit; }
 .ref-extra .ahead { color: var(--add-fg); }
 .ref-extra .behind { color: var(--del-fg); }
 .ref-extra .gone { color: var(--del-fg); font-style: italic; }
+.ref-extra .local-only { color: var(--fg-faint); font-style: italic; }
 .ref-group { padding: 4px 10px 1px; font-size: 11px; font-weight: 600; color: var(--fg-faint); }
 .ref-empty { padding: 3px 10px; font-size: 11.5px; color: var(--fg-faint); font-style: italic; }
 /* Too narrow for three columns: one list, one scroll. */
@@ -244,6 +245,10 @@ button { font: inherit; color: inherit; }
 .ref.remote { --c: var(--fg-muted); font-weight: 500; }
 .ref.tag { --c: var(--lane-6); }
 .ref .also { font-weight: 500; opacity: .75; }
+.ref svg + svg { margin-left: -1px; opacity: .8; }
+/* Not on any remote: dashed, like the uncommitted-changes edge. */
+.ref.local-only { border-style: dashed; border-color: color-mix(in srgb, var(--c) 80%, transparent); }
+.ref.local-only.current { outline: 1px dashed var(--bg); outline-offset: -3px; }
 
 /* Details */
 .details { overflow: auto; min-height: 0; min-width: 0; background: var(--bg); }
@@ -255,6 +260,8 @@ button { font: inherit; color: inherit; }
 .d-meta .sha:hover { text-decoration: underline; }
 .d-meta a { color: var(--accent); text-decoration: none; font-family: var(--mono); cursor: pointer; }
 .d-meta a:hover { text-decoration: underline; }
+.d-meta .push { padding: 0 6px; border: 1px dashed var(--fg-faint); border-radius: 4px; font-size: 11px; }
+.d-meta .push.gone { border-style: solid; font-style: italic; }
 .d-refs { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
 .d-body {
   margin: 10px 0 0; white-space: pre-wrap; word-break: break-word;

@@ -174,6 +174,9 @@ type Ref struct {
 	Kind     RefKind `json:"k"`
 	Current  bool    `json:"c,omitempty"` // checked out in this worktree
 	Worktree string  `json:"w,omitempty"` // checked out in another worktree (its directory name)
+	// LocalOnly marks a local branch that no remote has: no existing upstream and
+	// no remote branch of the same name.
+	LocalOnly bool `json:"lo,omitempty"`
 }
 
 // HeadInfo describes what this worktree has checked out.
@@ -198,16 +201,25 @@ func (r *Repo) Head(ctx context.Context) (HeadInfo, error) {
 
 // Refs maps commit SHA to the refs pointing at it.
 func (r *Repo) Refs(ctx context.Context, head HeadInfo) (map[string][]Ref, string, error) {
-	out, err := r.git(ctx, "for-each-ref", "--format=%(objectname)%1f%(*objectname)%1f%(refname)",
+	out, err := r.git(ctx, "for-each-ref", "--format=%(objectname)%1f%(*objectname)%1f%(refname)%1f%(upstream)",
 		"refs/heads", "refs/remotes", "refs/tags")
 	if err != nil {
 		return nil, "", err
 	}
 	others := r.otherWorktreeBranches(ctx)
+	type local struct {
+		sha      string
+		ref      Ref
+		upstream string
+	}
+	var locals []local
+	remoteRefs := map[string]bool{}   // full refnames under refs/remotes/
+	remoteBranch := map[string]bool{} // branch names on any remote
+	var remoteShorts []string
 	refs := map[string][]Ref{}
 	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
 		f := strings.Split(line, "\x1f")
-		if len(f) != 3 {
+		if len(f) != 4 {
 			continue
 		}
 		sha := f[0]
@@ -220,11 +232,15 @@ func (r *Repo) Refs(ctx context.Context, head HeadInfo) (map[string][]Ref, strin
 		case strings.HasPrefix(name, "refs/heads/"):
 			short := strings.TrimPrefix(name, "refs/heads/")
 			ref = Ref{Name: short, Kind: RefLocal, Current: short == head.Branch, Worktree: others[short]}
+			locals = append(locals, local{sha, ref, f[3]})
+			continue // added below, once the remotes are known
 		case strings.HasPrefix(name, "refs/remotes/"):
 			short := strings.TrimPrefix(name, "refs/remotes/")
 			if strings.HasSuffix(short, "/HEAD") {
 				continue
 			}
+			remoteRefs[name] = true
+			remoteShorts = append(remoteShorts, short)
 			ref = Ref{Name: short, Kind: RefRemote}
 		case strings.HasPrefix(name, "refs/tags/"):
 			ref = Ref{Name: strings.TrimPrefix(name, "refs/tags/"), Kind: RefTag}
@@ -232,6 +248,15 @@ func (r *Repo) Refs(ctx context.Context, head HeadInfo) (map[string][]Ref, strin
 			continue
 		}
 		refs[sha] = append(refs[sha], ref)
+	}
+	names := r.remoteNames(ctx)
+	for _, short := range remoteShorts {
+		remoteBranch[strings.TrimPrefix(short, remoteOf(short, names)+"/")] = true
+	}
+	for _, l := range locals {
+		// Without any remote there is nowhere to push, so nothing is marked.
+		l.ref.LocalOnly = len(names) > 0 && !remoteRefs[l.upstream] && !remoteBranch[l.ref.Name]
+		refs[l.sha] = append(refs[l.sha], l.ref)
 	}
 	if head.Branch == "" && head.SHA != "" {
 		refs[head.SHA] = append([]Ref{{Name: "HEAD", Kind: RefHead, Current: true}}, refs[head.SHA]...)
@@ -409,4 +434,51 @@ func parseTrack(s string) (ahead, behind int, gone bool) {
 		}
 	}
 	return
+}
+
+// PushState says whether a commit is on a remote, as of the last fetch.
+type PushState int
+
+const (
+	Pushed   PushState = iota // on some remote-tracking branch, or the repository has no remotes
+	Unpushed                  // reachable only from local branches or HEAD
+	Gone                      // unpushed, but on a branch whose upstream was deleted: pushed once, likely merged
+)
+
+// PushStates returns every commit that is not Pushed. A repository without
+// remotes returns nothing, since there is nowhere to push.
+func (r *Repo) PushStates(ctx context.Context) map[string]PushState {
+	if len(r.remoteNames(ctx)) == 0 {
+		return nil
+	}
+	states := map[string]PushState{}
+	out, err := r.git(ctx, "for-each-ref", "--format=%(refname)%1f%(upstream:track)", "refs/heads")
+	if err == nil {
+		var gone []string
+		for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
+			if name, track, ok := strings.Cut(line, "\x1f"); ok && track == "[gone]" {
+				gone = append(gone, name)
+			}
+		}
+		if len(gone) > 0 {
+			args := append([]string{"rev-list"}, gone...)
+			if out, err := r.git(ctx, append(args, "--not", "--remotes", "--")...); err == nil {
+				for _, sha := range strings.Fields(out) {
+					states[sha] = Gone
+				}
+			}
+		}
+	}
+	args := []string{"rev-list", "--branches"}
+	if _, err := r.git(ctx, "rev-parse", "-q", "--verify", "HEAD"); err == nil {
+		args = append(args, "HEAD")
+	}
+	if out, err := r.git(ctx, append(args, "--not", "--remotes", "--")...); err == nil {
+		for _, sha := range strings.Fields(out) {
+			if states[sha] == Pushed {
+				states[sha] = Unpushed
+			}
+		}
+	}
+	return states
 }

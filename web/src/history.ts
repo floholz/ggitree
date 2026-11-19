@@ -1,7 +1,7 @@
 // The commit list: a virtualized list of rows with the graph drawn on one canvas
 // that covers the visible part of the list.
 
-import { api, Row, WORKTREE } from "./api";
+import { api, GONE, Row, UNPUSHED, WORKTREE } from "./api";
 import { el, renderRefs, shortAge } from "./util";
 
 const ROW_H = 24;
@@ -263,12 +263,11 @@ export class HistoryView {
       if (!row) continue;
       const top = i * ROW_H - st;
       const ys = [top, top + ROW_H / 2, top + ROW_H];
-      const dashed = row.h === WORKTREE;
-      for (const [x1, y1, x2, y2, color] of row.e) {
+      for (const [x1, y1, x2, y2, color, dashed] of row.e) {
         c.strokeStyle = focus < 0 || color === focus
           ? this.laneColor(color)
           : this.dimColors[color % LANE_COLORS];
-        c.setLineDash(dashed && y1 === 1 ? [3, 3] : []);
+        c.setLineDash(dashed ? [3, 3] : []);
         const ax = x(x1), ay = ys[y1], bx = x(x2), by = ys[y2];
         c.beginPath();
         c.moveTo(ax, ay);
@@ -301,12 +300,23 @@ export class HistoryView {
         c.lineWidth = 2;
         continue;
       }
-      c.fillStyle = color;
-      c.fill();
-      c.strokeStyle = bg;
-      c.lineWidth = 1.5;
-      c.stroke();
-      c.lineWidth = 2;
+      if (row.x === UNPUSHED) { // hollow: not on any remote yet
+        c.beginPath();
+        c.arc(cx, cy, 3.75, 0, Math.PI * 2);
+        c.fillStyle = bg;
+        c.fill();
+        c.strokeStyle = color;
+        c.lineWidth = 2;
+        c.stroke();
+      } else {
+        // Faded: its upstream was deleted, so it was pushed once and is likely merged.
+        c.fillStyle = row.x === GONE ? this.dimColors[row.c % LANE_COLORS] : color;
+        c.fill();
+        c.strokeStyle = bg;
+        c.lineWidth = 1.5;
+        c.stroke();
+        c.lineWidth = 2;
+      }
       if (row.h === this.headSha) { // ring around the checked-out commit
         c.beginPath();
         c.arc(cx, cy, 7, 0, Math.PI * 2);

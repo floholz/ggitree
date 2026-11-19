@@ -15,9 +15,11 @@ const (
 )
 
 // Segment is a line piece inside one row, from lane X1 at Y1 to lane X2 at Y2.
+// Dashed segments belong to an edge that leaves a Dashed node.
 type Segment struct {
 	X1, Y1, X2, Y2 int
 	Color          int
+	Dashed         bool
 }
 
 // Row is the graph data for one commit.
@@ -32,11 +34,13 @@ type Row struct {
 type Node struct {
 	ID      string
 	Parents []string
+	Dashed  bool // draw the edges to its parents dashed
 }
 
 type lane struct {
-	id    string // commit this lane is waiting for
-	color int
+	id     string // commit this lane is waiting for
+	color  int
+	dashed bool // the edge in this lane leaves a Dashed node
 }
 
 // Layout computes rows for commits given newest first, where no parent appears
@@ -72,7 +76,7 @@ func Layout(nodes []Node) []Row {
 		tip := col < 0
 		if tip { // nothing below points here yet: a branch tip
 			col = freeLane()
-			lanes[col] = &lane{id: n.ID, color: nextColor}
+			lanes[col] = &lane{id: n.ID, color: nextColor, dashed: n.Dashed}
 			nextColor++
 		}
 		row.Lane = col
@@ -86,13 +90,13 @@ func Layout(nodes []Node) []Row {
 			switch {
 			case l.id == n.ID:
 				if !(tip && j == col) {
-					row.Segments = append(row.Segments, Segment{j, Top, col, Mid, l.color})
+					row.Segments = append(row.Segments, Segment{j, Top, col, Mid, l.color, l.dashed})
 				}
 				if j != col {
 					lanes[j] = nil
 				}
 			default:
-				row.Segments = append(row.Segments, Segment{j, Top, j, Bottom, l.color})
+				row.Segments = append(row.Segments, Segment{j, Top, j, Bottom, l.color, l.dashed})
 			}
 		}
 
@@ -100,8 +104,8 @@ func Layout(nodes []Node) []Row {
 		if len(n.Parents) == 0 {
 			lanes[col] = nil
 		} else {
-			lanes[col] = &lane{id: n.Parents[0], color: row.Color}
-			row.Segments = append(row.Segments, Segment{col, Mid, col, Bottom, row.Color})
+			lanes[col] = &lane{id: n.Parents[0], color: row.Color, dashed: n.Dashed}
+			row.Segments = append(row.Segments, Segment{col, Mid, col, Bottom, row.Color, n.Dashed})
 			for _, p := range n.Parents[1:] {
 				k := -1
 				for j, l := range lanes {
@@ -112,10 +116,11 @@ func Layout(nodes []Node) []Row {
 				}
 				if k < 0 {
 					k = freeLane()
-					lanes[k] = &lane{id: p, color: nextColor}
+					lanes[k] = &lane{id: p, color: nextColor, dashed: n.Dashed}
 					nextColor++
 				}
-				row.Segments = append(row.Segments, Segment{col, Mid, k, Bottom, lanes[k].color})
+				// Joining a lane that already waits keeps that lane's style below this row.
+				row.Segments = append(row.Segments, Segment{col, Mid, k, Bottom, lanes[k].color, n.Dashed})
 			}
 		}
 

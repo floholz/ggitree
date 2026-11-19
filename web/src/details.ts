@@ -1,6 +1,6 @@
 // The details panel: commit metadata and changed files, and the diff of one file.
 
-import { api, CommitDetail, FileChange, FileDiff, Ref, Row, WORKTREE } from "./api";
+import { api, CommitDetail, FileChange, FileDiff, GONE, Ref, Row, UNPUSHED, WORKTREE } from "./api";
 import { el, fullDate, renderRefs, toast } from "./util";
 
 export interface DetailsCallbacks {
@@ -149,6 +149,13 @@ export class DetailsView {
         ps.append(a);
       });
       meta.append(ps);
+    }
+    if (row.x === UNPUSHED) {
+      meta.append(el("span", "push unpushed", "not pushed"));
+    } else if (row.x === GONE) {
+      const g = el("span", "push gone", "upstream gone");
+      g.title = "Not on any remote, but its branch's upstream was deleted: it was pushed once and is likely merged";
+      meta.append(g);
     }
     head.append(meta);
 

@@ -65,16 +65,18 @@ export function renderRefs(refs: Ref[] | undefined | null, laneColor: string): H
   const sorted = [...refs].sort((a, b) => rank(a) - rank(b));
   for (const r of sorted) {
     if (r.k === "remote" && !remotes.includes(r)) continue;
-    const e = el("span", `ref ${r.k}${r.c ? " current" : ""}`);
+    const also = absorbed.get(r.n);
+    const e = el("span", `ref ${r.k}${r.c ? " current" : ""}${r.lo ? " local-only" : ""}`);
     if (r.k === "local" || r.k === "head") e.style.setProperty("--c", laneColor);
     const icon = r.k === "tag" ? ICON_TAG : r.k === "remote" ? ICON_REMOTE : r.k === "head" ? ICON_HEAD : ICON_BRANCH;
-    e.innerHTML = icon;
+    // The cloud sits before the name, so it stays visible when the label is cut off.
+    e.innerHTML = r.k === "local" && also ? icon + ICON_REMOTE : icon;
     e.append(document.createTextNode(r.n));
-    const also = absorbed.get(r.n);
     if (r.k === "local" && also) e.append(el("span", "also", ` · ${also.join(", ")}`));
     let title = `${kindLabel(r.k)} ${r.n}`;
     if (r.c) title += " (checked out here)";
     if (r.w) title += ` (checked out in worktree ${r.w})`;
+    if (r.lo) title += ", only local (not on any remote)";
     if (also) title += `, also on ${also.map((a) => `${a}/${r.n}`).join(", ")}`;
     e.title = title;
     if (r.w) e.append(el("span", "also", ` ⌂${r.w}`));

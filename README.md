@@ -19,6 +19,12 @@ The name is short for **go-git-tree**, because there are already too many git-tr
 ## Features
 
 - Colored branch lanes with merges, branch and tag labels, and a ring on the checked-out commit
+- Push state at a glance: unpushed commits are hollow dots on a dashed line, and the line turns solid
+  where the pushed history begins. A cloud on a branch label means a remote has it on the same commit; a
+  dashed label means the branch is on no remote. A new branch on pushed commits has a dashed label and
+  solid dots: the branch is new, its commits are not
+- Commits of a branch whose upstream was deleted (usually a merged pull request) are faded instead of
+  hollow. "Pushed" is as of your last fetch, since GGitree never fetches
 - Commit details with the changed files, and syntax-highlighted diffs
 - Uncommitted changes as their own row at the top
 - Live: updates within a moment when you or an agent commits, checks out or edits files

@@ -14,13 +14,13 @@ func TestLinearHistoryStaysInOneLane(t *testing.T) {
 			t.Fatalf("row %d = %+v, want lane 0 color 0 width 1", i, r)
 		}
 	}
-	if got := rows[0].Segments; !reflect.DeepEqual(got, []Segment{{0, Mid, 0, Bottom, 0}}) {
+	if got := rows[0].Segments; !reflect.DeepEqual(got, []Segment{{0, Mid, 0, Bottom, 0, false}}) {
 		t.Errorf("tip segments = %v", got)
 	}
-	if got := rows[1].Segments; !reflect.DeepEqual(got, []Segment{{0, Top, 0, Mid, 0}, {0, Mid, 0, Bottom, 0}}) {
+	if got := rows[1].Segments; !reflect.DeepEqual(got, []Segment{{0, Top, 0, Mid, 0, false}, {0, Mid, 0, Bottom, 0, false}}) {
 		t.Errorf("middle segments = %v", got)
 	}
-	if got := rows[2].Segments; !reflect.DeepEqual(got, []Segment{{0, Top, 0, Mid, 0}}) {
+	if got := rows[2].Segments; !reflect.DeepEqual(got, []Segment{{0, Top, 0, Mid, 0, false}}) {
 		t.Errorf("root segments = %v", got)
 	}
 }
@@ -38,7 +38,7 @@ func TestMergeOpensAndClosesALane(t *testing.T) {
 	if rows[0].Lane != 0 {
 		t.Fatalf("merge lane = %d", rows[0].Lane)
 	}
-	wantMerge := []Segment{{0, Mid, 0, Bottom, 0}, {0, Mid, 1, Bottom, 1}}
+	wantMerge := []Segment{{0, Mid, 0, Bottom, 0, false}, {0, Mid, 1, Bottom, 1, false}}
 	if !reflect.DeepEqual(rows[0].Segments, wantMerge) {
 		t.Errorf("merge segments = %v, want %v", rows[0].Segments, wantMerge)
 	}
@@ -49,7 +49,7 @@ func TestMergeOpensAndClosesALane(t *testing.T) {
 		t.Errorf("main row = %+v", rows[2])
 	}
 	// Both lanes wait for a; it takes lane 0 and lane 1 bends into it.
-	wantBase := []Segment{{0, Top, 0, Mid, 0}, {1, Top, 0, Mid, 1}}
+	wantBase := []Segment{{0, Top, 0, Mid, 0, false}, {1, Top, 0, Mid, 1, false}}
 	if !reflect.DeepEqual(rows[3].Segments, wantBase) {
 		t.Errorf("base segments = %v, want %v", rows[3].Segments, wantBase)
 	}
@@ -68,7 +68,7 @@ func TestSeparateTipsGetSeparateLanesAndColors(t *testing.T) {
 		t.Errorf("both tips have color %d", rows[0].Color)
 	}
 	// y's row: x's lane passes by.
-	if !reflect.DeepEqual(rows[1].Segments[0], Segment{0, Top, 0, Bottom, rows[0].Color}) {
+	if !reflect.DeepEqual(rows[1].Segments[0], Segment{0, Top, 0, Bottom, rows[0].Color, false}) {
 		t.Errorf("passing lane = %v", rows[1].Segments[0])
 	}
 }
@@ -90,11 +90,37 @@ func TestMergeIntoExistingLane(t *testing.T) {
 	// m's merge parent f is already awaited in lane 0 (by t), so it joins that lane.
 	found := false
 	for _, s := range rows[1].Segments {
-		if s == (Segment{1, Mid, 0, Bottom, rows[0].Color}) {
+		if s == (Segment{1, Mid, 0, Bottom, rows[0].Color, false}) {
 			found = true
 		}
 	}
 	if !found {
 		t.Errorf("m segments %v lack a join into lane 0", rows[1].Segments)
+	}
+}
+
+func TestDashedEdgesFollowTheirNode(t *testing.T) {
+	// u (unpushed) skips past the side tip x to its parent p: the edge stays
+	// dashed in every row it crosses, and p's own edge is solid again.
+	rows := Layout([]Node{
+		{ID: "u", Parents: []string{"p"}, Dashed: true},
+		{ID: "x", Parents: []string{"q"}},
+		{ID: "p", Parents: []string{"q"}},
+		{ID: "q"},
+	})
+	want := []Segment{{0, Mid, 0, Bottom, 0, true}}
+	if !reflect.DeepEqual(rows[0].Segments, want) {
+		t.Errorf("u segments = %v, want %v", rows[0].Segments, want)
+	}
+	if s := rows[1].Segments[0]; s != (Segment{0, Top, 0, Bottom, 0, true}) {
+		t.Errorf("u's edge passing x = %v, want dashed", s)
+	}
+	if s := rows[2].Segments[0]; s != (Segment{0, Top, 0, Mid, 0, true}) {
+		t.Errorf("u's edge into p = %v, want dashed", s)
+	}
+	for _, s := range rows[2].Segments {
+		if s.Y1 == Mid && s.Dashed {
+			t.Errorf("p's own edge %v is dashed", s)
+		}
 	}
 }

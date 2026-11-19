@@ -27,7 +27,8 @@ type RowJSON struct {
 	Lane    int        `json:"l"`
 	Color   int        `json:"c"`
 	Width   int        `json:"w"`
-	Edges   [][5]int   `json:"e"` // x1, y1, x2, y2, color
+	Edges   [][6]int   `json:"e"` // x1, y1, x2, y2, color, dashed (0 or 1)
+	Push    int        `json:"x,omitempty"` // gitx.PushState: 1 not pushed, 2 upstream gone
 }
 
 // Snapshot is the computed history of a repository at one moment.
@@ -88,6 +89,7 @@ func buildSnapshot(ctx context.Context, repo *gitx.Repo, scope gitx.Scope) (*Sna
 	for _, c := range commits {
 		known[c.SHA] = true
 	}
+	push := repo.PushStates(ctx)
 	nodes := make([]graph.Node, len(commits))
 	for i, c := range commits {
 		var ps []string
@@ -96,16 +98,22 @@ func buildSnapshot(ctx context.Context, repo *gitx.Repo, scope gitx.Scope) (*Sna
 				ps = append(ps, p)
 			}
 		}
-		nodes[i] = graph.Node{ID: c.SHA, Parents: ps}
+		// Not yet on a remote: uncommitted changes and unpushed commits.
+		dashed := c.SHA == gitx.WorktreeSHA || push[c.SHA] == gitx.Unpushed
+		nodes[i] = graph.Node{ID: c.SHA, Parents: ps, Dashed: dashed}
 	}
 	layout := graph.Layout(nodes)
 
 	s := &Snapshot{Fingerprint: fp, Head: head, Dirty: dirty, Rows: make([]RowJSON, len(commits)), index: make(map[string]int, len(commits))}
 	for i, c := range commits {
 		g := layout[i]
-		edges := make([][5]int, len(g.Segments))
+		edges := make([][6]int, len(g.Segments))
 		for j, seg := range g.Segments {
-			edges[j] = [5]int{seg.X1, seg.Y1, seg.X2, seg.Y2, seg.Color}
+			d := 0
+			if seg.Dashed {
+				d = 1
+			}
+			edges[j] = [6]int{seg.X1, seg.Y1, seg.X2, seg.Y2, seg.Color, d}
 		}
 		parents := c.Parents
 		if parents == nil {
@@ -114,6 +122,7 @@ func buildSnapshot(ctx context.Context, repo *gitx.Repo, scope gitx.Scope) (*Sna
 		s.Rows[i] = RowJSON{
 			SHA: c.SHA, Parents: parents, Subject: c.Subject, Author: c.Author, Email: c.Email, Time: c.Time,
 			Refs: refs[c.SHA], Lane: g.Lane, Color: g.Color, Width: g.Width, Edges: edges,
+			Push: int(push[c.SHA]),
 		}
 		s.index[c.SHA] = i
 	}
