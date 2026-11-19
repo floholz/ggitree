@@ -158,6 +158,26 @@ button { font: inherit; color: inherit; }
 .refs-summary .chev { width: 10px; color: var(--fg-muted); font-size: 10px; }
 .refs-title { font-weight: 600; font-size: 12px; }
 .refs-count { font-size: 11px; color: var(--fg-muted); }
+/* Fetch: "fetch now" with the last fetch's age, and the Auto toggle */
+.fetch { display: flex; flex: none; margin-left: auto; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.fetch[hidden] { display: none; }
+.fetch button {
+  display: inline-flex; align-items: center; gap: 4px; height: 22px; padding: 0 7px; border: 0;
+  background: none; cursor: pointer; font: inherit; font-size: 11px; color: var(--fg-muted); white-space: nowrap;
+}
+.fetch button + button { border-left: 1px solid var(--border); }
+.fetch button:hover:not(:disabled) { background: var(--bg-hover); color: var(--fg); }
+.fetch svg { width: 13px; height: 13px; flex: none; }
+.fetch-now .age { font-variant-numeric: tabular-nums; }
+.fetch-now.running { cursor: progress; }
+.fetch-now.running svg { animation: fetch-pulse 1s ease-in-out infinite alternate; }
+.fetch-now.failed { color: var(--del-fg); }
+.fetch-auto { font-weight: 600; }
+.fetch-auto[aria-pressed="true"] { background: var(--sel); color: var(--accent); }
+@keyframes fetch-pulse { from { opacity: 1; } to { opacity: .3; } }
+@media (prefers-reduced-motion: reduce) { .fetch-now.running svg { animation: none; opacity: .6; } }
+@container left (max-width: 380px) { .fetch-now .age { display: none; } }
+.fetch:not([hidden]) + .refs-filter { margin-left: 0; }
 .refs-filter {
   margin-left: auto; width: 180px; min-width: 70px; flex: 0 1 auto; height: 22px; padding: 0 7px;
   border: 1px solid var(--border); border-radius: 5px; background: var(--bg); color: var(--fg);

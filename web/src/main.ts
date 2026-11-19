@@ -1,6 +1,7 @@
 import "./style.css";
 import { api, Row, scope, Scope, setScope, State, WORKTREE } from "./api";
 import { DetailsView } from "./details";
+import { FetchControl } from "./fetch";
 import { HistoryView } from "./history";
 import { RefKindName, RefsView } from "./refs";
 import { toast } from "./util";
@@ -71,6 +72,8 @@ const refs = new RefsView($("refs"), {
   },
 });
 try { refs.setOpen(localStorage.getItem(REFS_OPEN_KEY) !== "0"); } catch { /* private mode */ }
+const fetcher = new FetchControl();
+refs.setRemoteControls(fetcher.root, (on) => fetcher.setAvailable(on));
 
 // ---------- Loading and live updates ----------
 
@@ -104,6 +107,7 @@ async function whenIdle() {
 
 function showState(st: State) {
   state = st;
+  fetcher.setState(st);
   repoName.textContent = st.repo?.name ?? "ggitree";
   document.title = st.repo ? `${st.repo.name} · ggitree` : "ggitree";
   repoName.title = st.repo?.root ?? "";
@@ -207,6 +211,8 @@ function connect() {
   };
   es.addEventListener("changed", () => queueReload());
   es.addEventListener("repo", () => queueReload(true));
+  // A fetch that changed nothing (or one run in a terminal) only moves the "fetched" age.
+  es.addEventListener("fetched", () => void api.state().then((st) => fetcher.setState(st), () => {}));
   es.addEventListener("bye", () => {
     live.className = "live off";
     live.title = "ggitree stopped";

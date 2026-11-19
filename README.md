@@ -24,7 +24,9 @@ The name is short for **go-git-tree**, because there are already too many git-tr
   dashed label means the branch is on no remote. A new branch on pushed commits has a dashed label and
   solid dots: the branch is new, its commits are not
 - Commits of a branch whose upstream was deleted (usually a merged pull request) are faded instead of
-  hollow. "Pushed" is as of your last fetch, since GGitree never fetches
+  hollow. "Pushed" is as of the last fetch
+- Fetch from the Branches header, which shows how long ago the last fetch was (yours from a terminal count
+  too). **Auto** fetches every 5 minutes while the page is visible; it is off by default
 - Commit details with the changed files, and syntax-highlighted diffs
 - Uncommitted changes as their own row at the top
 - Live: updates within a moment when you or an agent commits, checks out or edits files
@@ -36,7 +38,9 @@ The name is short for **go-git-tree**, because there are already too many git-tr
 - Local branches by default; **All** adds every remote branch and tag
 - Layout switch: automatic, always stacked, or always side by side
 - Follows your light or dark mode
-- Read-only: it never changes your repository
+- Read-only: it never changes your branches, HEAD, index or files. The one exception is fetching, which
+  you start (or turn on): it only updates remote-tracking branches, never prompts for credentials, and
+  starts no gc or maintenance
 
 One Go binary with the page embedded. No Node at runtime or build time.
 

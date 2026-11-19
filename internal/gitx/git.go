@@ -1,6 +1,7 @@
 // Package gitx reads repository data by running the git CLI.
 //
-// It never writes to the repository: every command here is a read-only query.
+// Every command here is a read-only query, except Fetch (fetch.go), which only
+// updates remote-tracking refs and runs only when the user asks for it.
 package gitx
 
 import (

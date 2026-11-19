@@ -41,6 +41,14 @@ export interface State {
   dirty: number;
   total: number;
   error?: string;
+  fetched?: number; // last fetch by anyone (FETCH_HEAD time); missing for never
+  fetchError?: string; // why ggitree's last fetch failed
+}
+
+export interface FetchResult {
+  fetched?: number;
+  fetchError?: string;
+  skipped?: boolean; // backing off after a failure, or a fetch is already running
 }
 
 export interface FileChange {
@@ -116,7 +124,20 @@ async function get<T>(path: string, params: Record<string, string | number> = {}
   return body as T;
 }
 
+async function post<T>(path: string, body: unknown): Promise<T> {
+  const res = await fetch(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Ggitree": "1" },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data?.error ?? res.statusText);
+  return data as T;
+}
+
 export const api = {
+  /** Fetches every remote; auto marks a timed fetch, which backs off after failures. */
+  fetch: (auto: boolean) => post<FetchResult>("api/fetch", { auto }),
   state: () => get<State>("api/state"),
   rows: (offset: number, limit: number) =>
     get<{ version: number; offset: number; rows: Row[] }>("api/rows", { offset, limit }),

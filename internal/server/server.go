@@ -44,7 +44,18 @@ type Server struct {
 	refresh  chan struct{}
 	watchCtl chan *gitx.Repo
 	shutdown func()
+
+	fetching    sync.Mutex // held while a fetch runs; one at a time
+	fetchMu     sync.Mutex // guards the fields below
+	fetchErr    string     // the last fetch's error, until one succeeds
+	fetchFailAt time.Time
+	lastFetch   time.Time // FETCH_HEAD time the pages were last told about
 }
+
+// autoFetchBackoff is how long automatic fetches pause after one failed, so a
+// missing key or a dead network doesn't retry every few minutes. Fetching by hand
+// always tries.
+const autoFetchBackoff = 15 * time.Minute
 
 // New creates a server that will listen on addr and serve the page from assets.
 func New(addr string, assets fs.FS) *Server {
@@ -106,6 +117,9 @@ func (s *Server) Open(path string) error {
 	s.snaps = map[gitx.Scope]*Snapshot{gitx.ScopeLocal: snap}
 	s.version++
 	s.mu.Unlock()
+	s.fetchMu.Lock()
+	s.fetchErr, s.fetchFailAt, s.lastFetch = "", time.Time{}, repo.LastFetch()
+	s.fetchMu.Unlock()
 	select {
 	case s.watchCtl <- repo:
 	default:
@@ -183,6 +197,16 @@ func (s *Server) refreshLoop(ctx context.Context) {
 		if repo == nil {
 			continue
 		}
+		// A fetch that changed no refs still moves FETCH_HEAD; pages show its age.
+		if t := repo.LastFetch(); !t.IsZero() {
+			s.fetchMu.Lock()
+			moved := !t.Equal(s.lastFetch)
+			s.lastFetch = t
+			s.fetchMu.Unlock()
+			if moved {
+				s.broadcast("fetched")
+			}
+		}
 		fp, _, _, _, err := fingerprint(ctx, repo)
 		if err == nil && old != nil && fp == old.Fingerprint {
 			continue
@@ -244,6 +268,7 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("GET /api/diff", s.handleDiff)
 	mux.HandleFunc("GET /api/events", s.handleEvents)
 	mux.HandleFunc("POST /api/open", s.requireHeader(s.handleOpen))
+	mux.HandleFunc("POST /api/fetch", s.requireHeader(s.handleFetch))
 	mux.HandleFunc("POST /api/shutdown", s.requireHeader(s.handleShutdown))
 	return s.checkHost(mux)
 }
@@ -298,6 +323,24 @@ type stateJSON struct {
 	Dirty   int            `json:"dirty"`
 	Total   int            `json:"total"`
 	Error   string         `json:"error,omitempty"`
+	fetchJSON
+}
+
+// fetchJSON is the fetch status, part of the state and the answer to a fetch.
+type fetchJSON struct {
+	Fetched    int64  `json:"fetched,omitempty"`    // unix time of the last fetch by anyone; 0 for never
+	FetchError string `json:"fetchError,omitempty"` // why the last fetch by ggitree failed
+}
+
+func (s *Server) fetchStatus(repo *gitx.Repo) fetchJSON {
+	var f fetchJSON
+	if t := repo.LastFetch(); !t.IsZero() {
+		f.Fetched = t.Unix()
+	}
+	s.fetchMu.Lock()
+	f.FetchError = s.fetchErr
+	s.fetchMu.Unlock()
+	return f
 }
 
 type repoJSON struct {
@@ -310,6 +353,7 @@ func (s *Server) handleState(w http.ResponseWriter, r *http.Request) {
 	st := stateJSON{Version: version, Error: errMsg}
 	if repo != nil {
 		st.Repo = &repoJSON{Name: repo.Name(), Root: repo.Root}
+		st.fetchJSON = s.fetchStatus(repo)
 	}
 	if snap != nil {
 		st.Head = &snap.Head
@@ -470,6 +514,53 @@ func (s *Server) handleOpen(w http.ResponseWriter, r *http.Request) {
 	root := s.repo.Root
 	s.mu.RUnlock()
 	writeJSON(w, map[string]string{"root": root})
+}
+
+// handleFetch fetches every remote. {"auto": true} marks a timed fetch, which is
+// skipped while backing off from a failure.
+func (s *Server) handleFetch(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Auto bool `json:"auto"`
+	}
+	_ = json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<10)).Decode(&body)
+	s.mu.RLock()
+	repo := s.repo
+	s.mu.RUnlock()
+	if repo == nil {
+		writeErr(w, http.StatusConflict, errors.New("no repository open"))
+		return
+	}
+	type result struct {
+		fetchJSON
+		Skipped bool `json:"skipped,omitempty"` // backing off, or another fetch is running
+	}
+	s.fetchMu.Lock()
+	backoff := body.Auto && s.fetchErr != "" && time.Since(s.fetchFailAt) < autoFetchBackoff
+	s.fetchMu.Unlock()
+	if backoff || !s.fetching.TryLock() {
+		writeJSON(w, result{fetchJSON: s.fetchStatus(repo), Skipped: true})
+		return
+	}
+	// Not the request's context: a page that reloads mid-fetch shouldn't kill git.
+	err := repo.Fetch(context.Background())
+	s.fetching.Unlock()
+	s.mu.RLock()
+	switched := s.repo != repo
+	s.mu.RUnlock()
+	if switched { // the result belongs to a repository no longer shown
+		writeJSON(w, result{Skipped: true})
+		return
+	}
+	s.fetchMu.Lock()
+	if err != nil {
+		s.fetchErr, s.fetchFailAt = err.Error(), time.Now()
+		log.Printf("fetch: %v", err)
+	} else {
+		s.fetchErr = ""
+	}
+	s.fetchMu.Unlock()
+	s.requestRefresh()
+	writeJSON(w, result{fetchJSON: s.fetchStatus(repo)})
 }
 
 func (s *Server) handleShutdown(w http.ResponseWriter, r *http.Request) {

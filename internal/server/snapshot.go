@@ -27,7 +27,7 @@ type RowJSON struct {
 	Lane    int        `json:"l"`
 	Color   int        `json:"c"`
 	Width   int        `json:"w"`
-	Edges   [][6]int   `json:"e"` // x1, y1, x2, y2, color, dashed (0 or 1)
+	Edges   [][6]int   `json:"e"`           // x1, y1, x2, y2, color, dashed (0 or 1)
 	Push    int        `json:"x,omitempty"` // gitx.PushState: 1 not pushed, 2 upstream gone
 }
 

@@ -24,6 +24,7 @@ export class RefsView {
   private selectedSha = "";
   private isOpen = true;
   private version = 0;
+  private extra: { el: HTMLElement; onAvailable(on: boolean): void } | null = null;
 
   constructor(private root: HTMLElement, private cb: RefsCallbacks) {
     this.summary.type = "button";
@@ -60,6 +61,13 @@ export class RefsView {
   }
 
   get open() { return this.isOpen; }
+
+  /** Adds controls to the header that make sense only with remotes, like fetching. */
+  setRemoteControls(e: HTMLElement, onAvailable: (on: boolean) => void) {
+    this.extra = { el: e, onAvailable };
+    e.hidden = true;
+    this.head.insertBefore(e, this.filter);
+  }
 
   setOpen(open: boolean) {
     this.isOpen = open;
@@ -112,6 +120,7 @@ export class RefsView {
 
   private render() {
     this.renderSummary();
+    this.extra?.onAvailable(this.list.remotes.length > 0);
     const q = this.filter.value.trim().toLowerCase();
     const match = (name: string) => !q || name.toLowerCase().includes(q);
 
